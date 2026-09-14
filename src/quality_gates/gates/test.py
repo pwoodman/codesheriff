@@ -16,11 +16,13 @@ from quality_gates.timing import compare_timings, parse_junit
 from quality_gates.tools import run, which
 
 
-def run_tests(root: Path, config: QualityConfig) -> GateResult:
+def run_tests(
+    root: Path, config: QualityConfig, selection: list[str] | None = None
+) -> GateResult:
     auth_reason = check_authorization(config, "test execution", permission="execution")
     if auth_reason:
         return blocked_gate_result("test", auth_reason)
-    selected, selection_note = _selected_tests(root)
+    selected, selection_note = _selected_tests(root, selection)
     runners: list[tuple[str, list[str]]] = []
     if (root / "tests").is_dir() or list(root.glob("test_*.py")):
         pytest = which("pytest", project=root) or which("py.test", project=root)
@@ -287,7 +289,9 @@ def _require_source_tests(root: Path, config: QualityConfig) -> list[Finding]:
     return []
 
 
-def _selected_tests(root: Path) -> tuple[list[str], str]:
+def _selected_tests(
+    root: Path, selection: list[str] | None = None
+) -> tuple[list[str], str]:
     """Use impact-selected tests only when fresh structured evidence exists."""
     path = root / ".quality-reports" / "impact.json"
     try:
@@ -295,11 +299,13 @@ def _selected_tests(root: Path) -> tuple[list[str], str]:
         mapping = data.get("tests") if isinstance(data, dict) else None
     except (OSError, json.JSONDecodeError):
         mapping = None
+    selected_paths = {str(path).replace("\\", "/") for path in selection or []}
     candidates = (
         sorted(
             {
                 str(test)
-                for tests in mapping.values()
+                for changed_path, tests in mapping.items()
+                if not selected_paths or str(changed_path) in selected_paths
                 for test in tests
                 if (root / str(test)).is_file()
             }

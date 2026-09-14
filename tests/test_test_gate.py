@@ -52,6 +52,37 @@ def test_test_gate_uses_impact_selected_tests(tmp_path: Path, monkeypatch) -> No
     assert any("impact-selected" in note for note in result.notes)
 
 
+def test_test_gate_scopes_impact_selection_to_manifest_paths(
+    tmp_path: Path, monkeypatch
+) -> None:
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "test_app.py").write_text("def test_ok(): pass\n", encoding="utf-8")
+    (tests / "test_other.py").write_text("def test_ok(): pass\n", encoding="utf-8")
+    reports = tmp_path / ".quality-reports"
+    reports.mkdir()
+    (reports / "impact.json").write_text(
+        '{"tests":{"src/app.py":["tests/test_app.py"],'
+        '"src/other.py":["tests/test_other.py"]}}',
+        encoding="utf-8",
+    )
+    seen: list[list[str]] = []
+    monkeypatch.setattr("quality_gates.gates.test.which", lambda *_a, **_k: "pytest")
+    monkeypatch.setattr(
+        "quality_gates.gates.test.run",
+        lambda argv, **_k: (
+            seen.append(argv)
+            or RunResult(argv=argv, returncode=0, exit_state="success")
+        ),
+    )
+
+    result = run_tests(tmp_path, QualityConfig(), selection=["src/app.py"])
+
+    assert seen[0][-1] == "tests/test_app.py"
+    assert "tests/test_other.py" not in seen[0]
+    assert any("impact-selected" in note for note in result.notes)
+
+
 def test_source_without_tests_is_not_reported_as_verified(tmp_path: Path) -> None:
     (tmp_path / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
 

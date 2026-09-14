@@ -49,6 +49,52 @@ def test_hardcoded_secret_is_p0(tmp_path: Path) -> None:
     assert "audit-4" in rules
 
 
+def test_audit_does_not_flag_detector_metadata_as_dynamic_execution(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "rules.py").write_text(
+        'RULE = {"message": "eval() on untrusted input is dangerous"}\n',
+        encoding="utf-8",
+    )
+
+    context = load_context(tmp_path, QualityConfig())
+
+    assert 29 not in scan_patterns(context)
+
+
+def test_audit_still_flags_actual_dynamic_execution(tmp_path: Path) -> None:
+    (tmp_path / "app.py").write_text(
+        "value = input()\nresult = eval(value)\n",
+        encoding="utf-8",
+    )
+
+    context = load_context(tmp_path, QualityConfig())
+
+    assert 29 in scan_patterns(context)
+
+
+def test_audit_does_not_flag_secret_names_in_error_strings(tmp_path: Path) -> None:
+    (tmp_path / "client.py").write_text(
+        'def detail():\n    return ("set ANTHROPIC_API_KEY or OPENAI_API_KEY")\n',
+        encoding="utf-8",
+    )
+
+    context = load_context(tmp_path, QualityConfig())
+
+    assert 24 not in scan_patterns(context)
+
+
+def test_audit_still_flags_secret_fields_in_responses(tmp_path: Path) -> None:
+    (tmp_path / "api.py").write_text(
+        'def response(user):\n    return jsonify({"api_key": user.api_key})\n',
+        encoding="utf-8",
+    )
+
+    context = load_context(tmp_path, QualityConfig())
+
+    assert 24 in scan_patterns(context)
+
+
 def test_open_api_route_is_p0(tmp_path: Path) -> None:
     (tmp_path / "api.py").write_text(
         """

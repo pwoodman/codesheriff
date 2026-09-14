@@ -39,17 +39,39 @@ _PREREQUISITES = {
 }
 
 
-def build_plan(
-    gates: list[str],
-    config: QualityConfig,
-    manifest: ChangeManifest | None,
-    all_gates: tuple[str, ...] | list[str] | None = None,
-    root: Path | None = None,
-) -> list[PlannedTask]:
-    paths = tuple(manifest.paths) if manifest else ()
+def order_by_prerequisites(gates: list[str]) -> list[str]:
     selected = set(gates)
-    plan: list[PlannedTask] = []
+    ordered: list[str] = []
+    visited: set[str] = set()
 
+    def visit(gate: str) -> None:
+        if gate in visited:
+            return
+        visited.add(gate)
+        for prereq in _PREREQUISITES.get(gate, ()):
+            if prereq in selected and prereq not in visited:
+                visit(prereq)
+        ordered.append(gate)
+
+    for gate in gates:
+        visit(gate)
+    return ordered
+
+
+_TRUSTED_ISOLATED_GATES = {
+    "coverage",
+    "ui",
+    "compile",
+    "test",
+    "migration",
+    "authorization",
+    "resilience",
+    "mutation",
+    "performance",
+}
+
+
+def _uncertainty_context(manifest: ChangeManifest | None) -> tuple[str, str]:
     uncertainty = (
         "full repository assessment"
         if manifest is None
@@ -60,74 +82,101 @@ def build_plan(
         )
     )
     fallback_scope = "repository-wide" if manifest is None else "scoped"
+    return uncertainty, fallback_scope
 
-    for gate in gates:
-        prerequisites = tuple(
-            item for item in _PREREQUISITES.get(gate, ()) if item in selected
-        )
-        risk = gate in triggered_capabilities(list(paths))
-        reason = (
-            "selected by configured gate policy"
-            if manifest is None
-            else (
-                f"risk-triggered by {len(paths)} changed path(s)"
-                if risk
-                else f"selected for {len(paths)} changed path(s)"
-            )
-        )
-        reused = None
-        if root is not None:
-            report = root / ".quality-reports" / f"{gate}.json"
-            if report.is_file():
-                reused = f"existing {gate} artifact present"
 
-        plan.append(
-            PlannedTask(
-                name=gate,
-                required=gate in config.fail_on or risk,
-                prerequisites=prerequisites,
-                inputs=paths,
-                reason=reason,
-                permission=(
-                    "trusted isolated worker"
-                    if gate
-                    in {
-                        "coverage",
-                        "ui",
-                        "compile",
-                        "test",
-                        "migration",
-                        "authorization",
-                        "resilience",
-                        "mutation",
-                        "performance",
-                    }
-                    else "read-only"
-                ),
-                status="selected",
-                reused_evidence=reused,
-                uncertainty=uncertainty,
-                fallback_scope=fallback_scope,
-                execution_count=1,
-            )
+def _selection_reason(
+    manifest: ChangeManifest | None, path_count: int, risk: bool
+) -> str:
+    if manifest is None:
+        return "selected by configured gate policy"
+    if risk:
+        return f"risk-triggered by {path_count} changed path(s)"
+    return f"selected for {path_count} changed path(s)"
+
+
+def _reused_evidence(root: Path | None, gate: str) -> str | None:
+    if root is None:
+        return None
+    report = root / ".quality-reports" / f"{gate}.json"
+    return f"existing {gate} artifact present" if report.is_file() else None
+
+
+def _build_selected_task(
+    gate: str,
+    *,
+    selected: set[str],
+    paths: tuple[str, ...],
+    config: QualityConfig,
+    manifest: ChangeManifest | None,
+    root: Path | None,
+    uncertainty: str,
+    fallback_scope: str,
+) -> PlannedTask:
+    prerequisites = tuple(
+        item for item in _PREREQUISITES.get(gate, ()) if item in selected
+    )
+    risk = gate in triggered_capabilities(list(paths))
+    permission = (
+        "trusted isolated worker" if gate in _TRUSTED_ISOLATED_GATES else "read-only"
+    )
+    return PlannedTask(
+        name=gate,
+        required=gate in config.fail_on or risk,
+        prerequisites=prerequisites,
+        inputs=paths,
+        reason=_selection_reason(manifest, len(paths), risk),
+        permission=permission,
+        status="selected",
+        reused_evidence=_reused_evidence(root, gate),
+        uncertainty=uncertainty,
+        fallback_scope=fallback_scope,
+        execution_count=1,
+    )
+
+
+def _build_excluded_task(gate: str) -> PlannedTask:
+    return PlannedTask(
+        name=gate,
+        required=False,
+        prerequisites=(),
+        inputs=(),
+        reason="excluded from execution plan",
+        permission="none",
+        status="excluded",
+        exclusion_reason="not applicable to changed surface or excluded by configuration",
+        execution_count=0,
+    )
+
+
+def build_plan(
+    gates: list[str],
+    config: QualityConfig,
+    manifest: ChangeManifest | None,
+    all_gates: tuple[str, ...] | list[str] | None = None,
+    root: Path | None = None,
+) -> list[PlannedTask]:
+    paths = tuple(manifest.paths) if manifest else ()
+    sorted_gates = order_by_prerequisites(gates)
+    selected = set(sorted_gates)
+    uncertainty, fallback_scope = _uncertainty_context(manifest)
+
+    plan: list[PlannedTask] = [
+        _build_selected_task(
+            gate,
+            selected=selected,
+            paths=paths,
+            config=config,
+            manifest=manifest,
+            root=root,
+            uncertainty=uncertainty,
+            fallback_scope=fallback_scope,
         )
+        for gate in sorted_gates
+    ]
 
     pool = list(all_gates or GATES)
-    for gate in pool:
-        if gate not in selected:
-            plan.append(
-                PlannedTask(
-                    name=gate,
-                    required=False,
-                    prerequisites=(),
-                    inputs=(),
-                    reason="excluded from execution plan",
-                    permission="none",
-                    status="excluded",
-                    exclusion_reason="not applicable to changed surface or excluded by configuration",
-                    execution_count=0,
-                )
-            )
+    plan.extend(_build_excluded_task(gate) for gate in pool if gate not in selected)
     return plan
 
 

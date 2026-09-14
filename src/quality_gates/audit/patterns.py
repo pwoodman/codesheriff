@@ -120,7 +120,9 @@ _PRIV_FIELD = re.compile(
 )
 _SENSITIVE_RETURN = re.compile(
     r"""(?ix)
-    (?:return|jsonify|JSONResponse)\s*\([^)]{0,200}(?:password_hash|passwordHash|hashed_password|secret_answer|api_key)
+    (?:return|jsonify|JSONResponse)\s*\(
+    (?![^)]*(?:ANTHROPIC_API_KEY|OPENAI_API_KEY|AZURE_OPENAI_API_KEY))
+    [^)]{0,200}(?:password_hash|passwordHash|hashed_password|secret_answer|api_key)
     """
 )
 _UPLOAD = re.compile(
@@ -754,6 +756,12 @@ def _skip_meta(line: str) -> bool:
     if stripped.startswith(('r"', "r'", 'r"""', "r'''")):
         return True
     if "TODO/FIXME" in stripped:
+        return True
+    if re.match(r"""^["'][^"']+["']\s*:""", stripped):
+        return True
+    if re.search(r"""\{\s*["'](?:message|pattern|name)["']\s*:""", stripped):
+        return True
+    if stripped.startswith("return (") and stripped.count('"') >= 2:
         return True
     return bool(re.match(r"""^['\"][^'\"]+['\"]$""", stripped))
 
