@@ -45,3 +45,24 @@ def test_plan_topologically_orders_prerequisites() -> None:
     plan = build_plan(["ui", "compile", "security"], QualityConfig(), None)
     selected_names = [t.name for t in plan if t.status == "selected"]
     assert selected_names == ["security", "compile", "ui"]
+
+
+def test_plan_reports_reused_evidence_from_existing_artifact(tmp_path) -> None:
+    reports_dir = tmp_path / ".quality-reports"
+    reports_dir.mkdir()
+    (reports_dir / "lint.json").write_text("{}", encoding="utf-8")
+
+    plan = build_plan(["lint"], QualityConfig(), None, root=tmp_path)
+
+    assert plan[0].reused_evidence == "existing lint artifact present"
+
+
+def test_plan_excluded_task_has_none_permission_and_reason() -> None:
+    plan = build_plan(["lint"], QualityConfig(), None, all_gates=["lint", "coverage"])
+    excluded = next(t for t in plan if t.status == "excluded")
+
+    assert excluded.name == "coverage"
+    assert excluded.permission == "none"
+    assert excluded.exclusion_reason == (
+        "not applicable to changed surface or excluded by configuration"
+    )

@@ -1,6 +1,19 @@
 # Changelog
 
 
+
+
+## 1.15.4
+
+- Refactor `build_plan` in `quality_gates/planner.py` into smaller named
+  helpers (`_uncertainty_context`, `_selection_reason`, `_reused_evidence`,
+  `_build_selected_task`, `_build_excluded_task`) to bring it under the
+  80-line function-length threshold.
+
+## 1.15.3
+
+- patch release.
+
 ## 1.15.2
 
 - patch release.
