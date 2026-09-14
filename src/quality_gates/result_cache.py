@@ -165,6 +165,7 @@ def _read_or_compute(path: Path, compute: Callable[[], GateResult]) -> GateResul
             path,
             (json.dumps(result.to_dict(), sort_keys=True) + "\n").encode("utf-8"),
         )
+    result.notes.append("deterministic cache miss")
     return result
 
 
@@ -194,4 +195,5 @@ def _decode(payload: dict[str, Any]) -> GateResult:
         working_directory=payload.get("working_directory"),
         return_code=payload.get("return_code"),
         output_excerpt=payload.get("output_excerpt"),
+        evidence=dict(payload.get("evidence") or {}),
     )

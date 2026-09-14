@@ -38,3 +38,10 @@ def test_render_plan_explains_selection_and_exclusions() -> None:
     assert "- lint: required;" in rendered
     assert "Excluded gates:" in rendered
     assert "Summary:" in rendered
+
+
+def test_plan_topologically_orders_prerequisites() -> None:
+    # ui needs compile, compile needs security
+    plan = build_plan(["ui", "compile", "security"], QualityConfig(), None)
+    selected_names = [t.name for t in plan if t.status == "selected"]
+    assert selected_names == ["security", "compile", "ui"]

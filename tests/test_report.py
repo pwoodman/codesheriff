@@ -11,6 +11,7 @@ from quality_gates.report import (
     render_markdown,
     write_reports,
 )
+from quality_gates.report_cli import print_report
 from quality_gates.report_html import render_html as render_html_direct
 from quality_gates.report_model import INDUSTRY_COVERAGE
 from quality_gates.report_render import render_markdown as render_markdown_direct
@@ -133,6 +134,93 @@ def test_quality_report_reprints_last_run(tmp_path: Path, capsys, monkeypatch) -
     out = capsys.readouterr().out
     assert "Bump the version" in out
     assert "quality bump auto" in out
+
+
+def test_quality_report_missing_file_returns_2(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    code = main(["report"])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "no .quality-reports/quality-report.json" in err
+
+
+def test_quality_report_formats(tmp_path: Path, capsys, monkeypatch) -> None:
+    results = [GateResult(name="format", status="pass", duration_ms=10)]
+    write_reports(results, tmp_path / ".quality-reports", policy="enforce")
+    monkeypatch.chdir(tmp_path)
+
+    # JSON format
+    code_json = main(["report", "--format", "json"])
+    assert code_json == 0
+    out_json = capsys.readouterr().out
+    assert '"verdict": "pass"' in out_json
+
+    # Markdown format
+    code_md = main(["report", "--format", "markdown"])
+    assert code_md == 0
+    out_md = capsys.readouterr().out
+    assert "Quality report" in out_md
+
+    # HTML format
+    code_html = main(["report", "--format", "html"])
+    assert code_html == 0
+    out_html = capsys.readouterr().out
+    assert "<!DOCTYPE html>" in out_html
+
+    # SARIF format
+    code_sarif = main(["report", "--format", "sarif"])
+    assert code_sarif == 0
+    out_sarif = capsys.readouterr().out
+    assert '"$schema"' in out_sarif
+
+    # JUnit format
+    code_junit = main(["report", "--format", "junit"])
+    assert code_junit == 0
+    out_junit = capsys.readouterr().out
+    assert "<testsuite" in out_junit
+
+
+def test_quality_report_diff(tmp_path: Path, capsys, monkeypatch) -> None:
+    report_dir = tmp_path / ".quality-reports"
+    prev_results = [_fail("lint", "old lint error", path="a.py")]
+    write_reports(prev_results, report_dir, policy="enforce")
+    # rename to prev
+    (report_dir / "quality-report.json").rename(report_dir / "quality-report.prev.json")
+
+    curr_results = [
+        _fail("lint", "old lint error", path="a.py"),
+        _fail("lint", "new lint error", path="b.py"),
+    ]
+    write_reports(curr_results, report_dir, policy="enforce")
+
+    monkeypatch.chdir(tmp_path)
+    code = main(["report", "--diff", "--format", "json"])
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "new lint error" in out
+
+
+def test_quality_report_diff_no_previous(tmp_path: Path, capsys, monkeypatch) -> None:
+    report_dir = tmp_path / ".quality-reports"
+    curr_results = [_fail("lint", "some error", path="b.py")]
+    write_reports(curr_results, report_dir, policy="enforce")
+
+    monkeypatch.chdir(tmp_path)
+    code = main(["report", "--diff"])
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "no previous findings to diff against; showing full report" in out
+
+
+def test_print_report_direct(tmp_path: Path, capsys) -> None:
+    results = [GateResult(name="format", status="pass", duration_ms=10)]
+    write_reports(results, tmp_path / ".quality-reports", policy="enforce")
+    code = print_report(tmp_path, fmt="console", as_json=False)
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "Scorecard" in out
 
 
 def test_observe_recommends_adopt() -> None:

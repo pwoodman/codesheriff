@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 from quality_gates.models import Finding
@@ -129,7 +130,16 @@ def _apply_line_replacement(root: Path, finding: Finding, patch: str) -> str:
         extra = replacement[1:]
         for offset, row in enumerate(extra, start=1):
             lines.insert(index + offset, row + ("" if row.endswith("\n") else "\n"))
-    path.write_text("".join(lines), encoding="utf-8")
+    updated = "".join(lines)
+    if path.suffix in {".py", ".pyi"}:
+        try:
+            ast.parse(updated, filename=str(path))
+        except SyntaxError as exc:
+            return f"patch rejected: syntax error at line {exc.lineno or '?'}"
+    try:
+        path.write_text(updated, encoding="utf-8")
+    except OSError as exc:
+        return f"patch rejected: could not write file ({exc})"
     return f"applied line replacement at {finding.path}:{finding.line}"
 
 
@@ -161,13 +171,19 @@ def _apply_unified(root: Path, patch: str) -> str:
             text = text.replace(old_block, new_block, 1)
         updated[path] = text
 
+    originals = {path: path.read_bytes() for path in updated}
+    written: list[Path] = []
     try:
         for path, text in updated.items():
             path.write_text(text, encoding="utf-8")
+            written.append(path)
     except OSError:
-        # All inputs were validated. A filesystem write error is still explicit;
-        # normal local filesystems make this loop atomic enough for the target.
-        return "unified diff rejected: could not write validated patch"
+        for path in written:
+            try:
+                path.write_bytes(originals[path])
+            except OSError:
+                return "patch rejected: write failed and rollback failed"
+        return "patch rejected: could not write validated patch"
     return f"applied unified diff ({len(updated)} file(s))"
 
 

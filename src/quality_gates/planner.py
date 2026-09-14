@@ -39,6 +39,25 @@ _PREREQUISITES = {
 }
 
 
+def order_by_prerequisites(gates: list[str]) -> list[str]:
+    selected = set(gates)
+    ordered: list[str] = []
+    visited: set[str] = set()
+
+    def visit(gate: str) -> None:
+        if gate in visited:
+            return
+        visited.add(gate)
+        for prereq in _PREREQUISITES.get(gate, ()):
+            if prereq in selected and prereq not in visited:
+                visit(prereq)
+        ordered.append(gate)
+
+    for gate in gates:
+        visit(gate)
+    return ordered
+
+
 def build_plan(
     gates: list[str],
     config: QualityConfig,
@@ -47,7 +66,8 @@ def build_plan(
     root: Path | None = None,
 ) -> list[PlannedTask]:
     paths = tuple(manifest.paths) if manifest else ()
-    selected = set(gates)
+    sorted_gates = order_by_prerequisites(gates)
+    selected = set(sorted_gates)
     plan: list[PlannedTask] = []
 
     uncertainty = (
@@ -61,7 +81,7 @@ def build_plan(
     )
     fallback_scope = "repository-wide" if manifest is None else "scoped"
 
-    for gate in gates:
+    for gate in sorted_gates:
         prerequisites = tuple(
             item for item in _PREREQUISITES.get(gate, ()) if item in selected
         )
