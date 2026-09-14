@@ -165,3 +165,16 @@ def test_doctor_json_reports_negotiation(tmp_path: Path, capsys, monkeypatch) ->
     assert payload["trust"] == "trusted"
     assert payload["offline"] is False
     assert "ruff" in {item["tool"] for item in payload["tools"]}
+
+
+def test_doctor_install_rejected_when_offline(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    (tmp_path / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (tmp_path / "quality.toml").write_text(
+        "[quality]\noffline = true\n", encoding="utf-8"
+    )
+    monkeypatch.chdir(tmp_path)
+    code = main(["--json", "doctor", "--install"])
+    assert code == 2
+    assert "offline" in capsys.readouterr().err

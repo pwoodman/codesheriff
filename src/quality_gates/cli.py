@@ -1252,7 +1252,11 @@ def _watch(root: Path, config: QualityConfig, *, interval: float) -> int:
         return 0
 
 
-def _doctor(root: Path, config: QualityConfig, *, install: bool, as_json: bool) -> int:
+def _doctor_validate_install(config: QualityConfig, *, install: bool) -> int | None:
+    """Validate that --install is permitted and perform installation if requested.
+
+    Returns a non-zero exit code if validation fails, otherwise ``None``.
+    """
     if install and config.offline:
         print(
             "doctor --install is unavailable while quality.offline=true",
@@ -1262,12 +1266,17 @@ def _doctor(root: Path, config: QualityConfig, *, install: bool, as_json: bool) 
     if install:
         _install_all()
         write_github_path()
-    detected = detect_languages(root, config)
+    return None
+
+
+def _doctor_select_tools(
+    root: Path, config: QualityConfig, detected: dict[str, object]
+) -> list:
     manifest = load_tool_manifest()
     language_set = set(detected["languages"])
     kind_set = set(detected["file_kinds"])
     required = set(config.required_tools)
-    selected = [
+    return [
         tool
         for tool in manifest.tools
         if language_set.intersection(tool.languages)
@@ -1275,68 +1284,90 @@ def _doctor(root: Path, config: QualityConfig, *, install: bool, as_json: bool) 
         or required.intersection({tool.id})
         or set(tool.capabilities).intersection({"security", "dry"})
     ]
-    rows: list[dict[str, object]] = []
-    for tool in selected:
-        path = next(
-            (
-                found
-                for command in tool.commands
-                if (
-                    found := which(
-                        command,
-                        project=root,
-                        prefer_project=config.prefer_project_tools,
-                    )
+
+
+def _doctor_tool_row(
+    tool, root: Path, config: QualityConfig, required: set[str]
+) -> dict[str, object]:
+    path = next(
+        (
+            found
+            for command in tool.commands
+            if (
+                found := which(
+                    command,
+                    project=root,
+                    prefer_project=config.prefer_project_tools,
                 )
-            ),
-            None,
-        )
-        if path is None and tool.cache_path:
-            cached = cache_dir() / tool.cache_path
-            path = str(cached) if cached.is_file() else None
-        command = tool.commands[0] if tool.commands else tool.id
-        version = (
-            tool_version(command, tool.version_args)
-            if path and tool.commands
-            else tool.version
-            if path
-            else None
-        )
-        rows.append(
-            {
-                "tool": tool.id,
-                "path": path,
-                "version": version,
-                "ok": bool(path),
-                "required": tool.id in required,
-                "capabilities": list(tool.capabilities),
-                "platform_supported": tool.supports_current_platform(),
-                "auto_install_supported": tool.install_supported,
-                "auto_install_reason": tool.install_reason,
-            }
-        )
+            )
+        ),
+        None,
+    )
+    if path is None and tool.cache_path:
+        cached = cache_dir() / tool.cache_path
+        path = str(cached) if cached.is_file() else None
+    command = tool.commands[0] if tool.commands else tool.id
+    version = (
+        tool_version(command, tool.version_args)
+        if path and tool.commands
+        else tool.version
+        if path
+        else None
+    )
+    return {
+        "tool": tool.id,
+        "path": path,
+        "version": version,
+        "ok": bool(path),
+        "required": tool.id in required,
+        "capabilities": list(tool.capabilities),
+        "platform_supported": tool.supports_current_platform(),
+        "auto_install_supported": tool.install_supported,
+        "auto_install_reason": tool.install_reason,
+    }
+
+
+def _doctor_missing_rows(selected, required: set[str]) -> list[dict[str, object]]:
     known = {tool.id for tool in selected}
-    for tool_id in sorted(required - known):
-        rows.append(
-            {
-                "tool": tool_id,
-                "path": None,
-                "version": None,
-                "ok": False,
-                "required": True,
-                "capabilities": [],
-                "platform_supported": False,
-                "auto_install_supported": False,
-                "auto_install_reason": "not present in the tool manifest",
-            }
-        )
+    return [
+        {
+            "tool": tool_id,
+            "path": None,
+            "version": None,
+            "ok": False,
+            "required": True,
+            "capabilities": [],
+            "platform_supported": False,
+            "auto_install_supported": False,
+            "auto_install_reason": "not present in the tool manifest",
+        }
+        for tool_id in sorted(required - known)
+    ]
+
+
+def _doctor_compute_rows(
+    root: Path, config: QualityConfig, detected: dict[str, object]
+) -> list[dict[str, object]]:
+    required = set(config.required_tools)
+    selected = _doctor_select_tools(root, config, detected)
+    rows = [_doctor_tool_row(tool, root, config, required) for tool in selected]
+    rows.extend(_doctor_missing_rows(selected, required))
+    return rows
+
+
+def _doctor_build_payload(
+    root: Path,
+    config: QualityConfig,
+    detected: dict[str, object],
+    rows: list[dict[str, object]],
+) -> dict[str, object]:
     missing_required = [
         str(row["tool"]) for row in rows if row["required"] and not row["ok"]
     ]
     missing_optional = [
         str(row["tool"]) for row in rows if not row["required"] and not row["ok"]
     ]
-    payload = {
+    return {
         "platform": platform_id(),
         "cache": str(cache_dir()),
         "trust": config.trust,
@@ -1346,25 +1377,41 @@ def _doctor(root: Path, config: QualityConfig, *, install: bool, as_json: bool) 
         "missing_required": missing_required,
         "missing_optional": missing_optional,
     }
+
+
+def _doctor_render_console(
+    root: Path, config: QualityConfig, payload: dict[str, object]
+) -> None:
+    rows = payload["tools"]
+    print(f"project: {root}")
+    print(
+        f"platform: {payload['platform']} · trust: {config.trust} · "
+        f"offline: {str(config.offline).lower()}"
+    )
+    print(f"cache: {payload['cache']}")
+    width = max(len(row["tool"]) for row in rows)
+    for row in rows:
+        mark = "ok" if row["ok"] else "missing"
+        requirement = "required" if row["required"] else "optional"
+        extra = row["version"] or row["path"] or "not on PATH"
+        print(f"  {row['tool']:<{width}}  {mark:<8}  {requirement:<8}  {extra}")
+    print(
+        "\nTip: quality doctor --install downloads gitleaks, osv-scanner, golangci-lint, and Java jars."
+    )
+
+
+def _doctor(root: Path, config: QualityConfig, *, install: bool, as_json: bool) -> int:
+    validation_error = _doctor_validate_install(config, install=install)
+    if validation_error is not None:
+        return validation_error
+    detected = detect_languages(root, config)
+    rows = _doctor_compute_rows(root, config, detected)
+    payload = _doctor_build_payload(root, config, detected, rows)
     if as_json:
         print(json.dumps(payload, indent=2))
     else:
-        print(f"project: {root}")
-        print(
-            f"platform: {payload['platform']} · trust: {config.trust} · "
-            f"offline: {str(config.offline).lower()}"
-        )
-        print(f"cache: {payload['cache']}")
-        width = max(len(row["tool"]) for row in rows)
-        for row in rows:
-            mark = "ok" if row["ok"] else "missing"
-            requirement = "required" if row["required"] else "optional"
-            extra = row["version"] or row["path"] or "not on PATH"
-            print(f"  {row['tool']:<{width}}  {mark:<8}  {requirement:<8}  {extra}")
-        print(
-            "\nTip: quality doctor --install downloads gitleaks, osv-scanner, golangci-lint, and Java jars."
-        )
-    return 1 if missing_required else 0
+        _doctor_render_console(root, config, payload)
+    return 1 if payload["missing_required"] else 0
 
 
 def _install_all() -> None:
