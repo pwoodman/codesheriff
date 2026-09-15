@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.15.5
+
+- Rebrand the public CLI and MCP namespace as `codesheriff`, retaining
+  `quality` as a warning-emitting compatibility command.
+- Add the product-evaluation MVP: safe static benchmark inventory, policy
+  integrity verification, governance exports, time-budgeted planning, risk
+  zones, and CODEOWNERS ownership inference.
 
 
 
