@@ -176,7 +176,7 @@ def performance_bullets(
             f"({_fmt_ms(perf.gate_ms[slowest])})"
         )
     if not bullets:
-        bullets.append("- No performance metrics in this run (run `quality run`).")
+        bullets.append("- No performance metrics in this run (run `codesheriff run`).")
     return bullets
 
 

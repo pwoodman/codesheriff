@@ -324,7 +324,7 @@ def _java(root: Path, config: QualityConfig, files: list[Path]) -> GateResult:
     if not jar.is_file():
         return skip_result(
             "lint",
-            "checkstyle is not installed — run `quality doctor --install`",
+            "checkstyle is not installed — run `codesheriff doctor --install`",
             tool="checkstyle",
         )
     cfg = bundled_file("checkstyle.xml")

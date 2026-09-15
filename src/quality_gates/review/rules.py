@@ -106,7 +106,7 @@ def _rule_from_markdown(root: Path, path: Path) -> ReviewRule | None:
         text = path.read_text(encoding="utf-8")
     except OSError:
         return None
-    if LOOP_MARKER in text[:800]:
+    if LOOP_MARKER in text[:800] or "the-code-sheriff:agent-loop" in text[:800]:
         return None
     meta, body = _front_matter(text)
     body = body.strip()

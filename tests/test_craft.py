@@ -140,7 +140,7 @@ def test_playbook_puts_format_first_and_certificate_blocks() -> None:
     prompt = render_prompt(payload)
     assert "Next action:" in prompt
     assert "quality fix" in prompt or "format" in prompt
-    assert "quality oracle --run" in prompt
+    assert "codesheriff oracle --run" in prompt
 
 
 def test_green_oracle_is_merge_ready() -> None:

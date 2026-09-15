@@ -32,14 +32,15 @@ dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.8", "vulture>=2.11"]
 all = ["ruff>=0.8", "sqlfluff>=3.2", "semgrep>=1.90", "pytest>=8.0", "pytest-cov>=5.0", "vulture>=2.11"]
 
 [project.scripts]
-quality = "quality_gates.cli:main"
 codesheriff = "quality_gates.cli:main"
+# Compatibility entry point. New integrations must invoke `codesheriff`.
+quality = "quality_gates.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/pwoodman/the-code-sheriff"
-Repository = "https://github.com/pwoodman/the-code-sheriff"
-Issues = "https://github.com/pwoodman/the-code-sheriff/issues"
-Changelog = "https://github.com/pwoodman/the-code-sheriff/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/pwoodman/codesheriff"
+Repository = "https://github.com/pwoodman/codesheriff"
+Issues = "https://github.com/pwoodman/codesheriff/issues"
+Changelog = "https://github.com/pwoodman/codesheriff/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/quality_gates"]

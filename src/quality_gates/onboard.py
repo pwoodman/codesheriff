@@ -61,8 +61,8 @@ require_downstream = true
 [quality.merge]
 verify = "auto"
 siblings = false
-# quality setup --auto-merge enables GitHub repo auto-merge. Land PRs when
-# `quality certify` reports auto_merge=ready and The Code Sheriff is required.
+# codesheriff setup --auto-merge enables GitHub repo auto-merge. Land PRs when
+# `codesheriff certify` reports auto_merge=ready and The Code Sheriff is required.
 
 [quality.comments]
 in_oracle = true
@@ -100,7 +100,7 @@ def workflow_yaml(source: str, pin: str) -> str:
     comment = (
         f"# Pinned {source}@{pin[:12]}"
         if _SHA.fullmatch(pin)
-        else f"# Ref {source}@{pin} — re-run quality setup to pin a SHA"
+        else f"# Ref {source}@{pin} — re-run codesheriff setup to pin a SHA"
     )
     return f"""name: {CHECK_NAME}
 
@@ -155,7 +155,7 @@ jobs:
       - name: Run gates
         env:
           GITHUB_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
-        run: quality run
+        run: codesheriff run
 """
 
 
@@ -482,7 +482,7 @@ def init_repo(
     if not _SHA.fullmatch(resolved):
         print(
             f"could not resolve a SHA for {source_repo}; workflow uses @{resolved}. "
-            "Re-run quality setup when online to pin."
+            "Re-run codesheriff setup when online to pin."
         )
     if require_check:
         print(enable_required_check(root))
@@ -512,7 +512,7 @@ def enable_repo_auto_merge(root: Path) -> str:
     if 200 <= code < 300:
         return (
             f"enabled auto-merge on {owner_repo}. Require The Code Sheriff, "
-            "then land PRs when `quality certify` is ready."
+            "then land PRs when `codesheriff certify` is ready."
         )
     message = body.get("message") if isinstance(body, dict) else body
     return f"could not enable auto-merge (HTTP {code}: {message})"

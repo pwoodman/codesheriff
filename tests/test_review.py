@@ -279,7 +279,7 @@ def test_ingests_agents_md_and_cursor_globs(tmp_path: Path) -> None:
 
 def test_skips_generated_agent_loop_files(tmp_path: Path) -> None:
     (tmp_path / "AGENTS.md").write_text(
-        "<!-- the-code-sheriff:agent-loop -->\nRun the oracle.\n",
+        "<!-- codesheriff:agent-loop -->\nRun the oracle.\n",
         encoding="utf-8",
     )
     skill = tmp_path / ".cursor" / "skills" / "the-code-sheriff"
@@ -562,7 +562,7 @@ def test_oracle_prompt_lists_blockers() -> None:
     assert payload["green"] is False
     prompt = render_prompt(payload)
     assert "a.py:3" in prompt
-    assert "quality oracle --run" in prompt
+    assert "codesheriff oracle --run" in prompt
     assert "why:" in prompt or "E001" in prompt
 
 
@@ -574,22 +574,22 @@ def test_mcp_lists_and_calls_oracle(tmp_path: Path, monkeypatch) -> None:
     assert listed is not None
     names = {tool["name"] for tool in listed["result"]["tools"]}
     assert {
-        "quality_oracle",
-        "quality_run",
-        "quality_review",
-        "quality_finding_context",
-        "quality_apply_fix",
-        "quality_merge",
-        "quality_pr_comments",
-        "quality_fix",
-        "quality_certify",
+        "codesheriff_oracle",
+        "codesheriff_run",
+        "codesheriff_review",
+        "codesheriff_finding_context",
+        "codesheriff_apply_fix",
+        "codesheriff_merge",
+        "codesheriff_pr_comments",
+        "codesheriff_fix",
+        "codesheriff_certify",
     } <= names
     called = handle(
         {
             "jsonrpc": "2.0",
             "id": 2,
             "method": "tools/call",
-            "params": {"name": "quality_oracle", "arguments": {}},
+            "params": {"name": "codesheriff_oracle", "arguments": {}},
         },
         runner=lambda _a: 0,
     )

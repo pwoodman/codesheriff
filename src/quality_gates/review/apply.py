@@ -77,7 +77,7 @@ def apply_and_verify(
                 "status": status,
                 "resolved": True,
                 "attempts": attempt,
-                "verify": f"quality run --changed --only {gate}",
+                "verify": f"codesheriff run --changed --only {gate}",
             }
     return {
         "status": status,

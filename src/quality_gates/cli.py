@@ -50,6 +50,10 @@ def _invoked_as_sheriff(argv: Sequence[str] | None) -> bool:
     return name in {"codesheriff", "the-codesheriff"} or name.startswith("codesheriff")
 
 
+def _invoked_as_legacy_quality(argv: Sequence[str] | None) -> bool:
+    return argv is None and Path(sys.argv[0]).name.lower() == "quality"
+
+
 def _add_onboard_args(
     parser: argparse.ArgumentParser,
     *,
@@ -112,7 +116,7 @@ def _add_onboard_args(
         "--agents",
         action=argparse.BooleanOptionalAction,
         default=agents,
-        help="write Cursor/Claude MCP, rule, and skill so agents loop on quality oracle",
+        help="write Cursor/Claude MCP, rule, and skill so agents loop on codesheriff oracle",
     )
     parser.add_argument(
         "--auto-merge",
@@ -130,9 +134,14 @@ def _add_onboard_args(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="codesheriff" if _invoked_as_sheriff(argv) else "quality",
+        prog="codesheriff",
         description="Multi-language format, lint, DRY, security, compile, impact, coverage, 120-point audit, UI, version, and AI review gates.",
     )
+    if _invoked_as_legacy_quality(argv):
+        print(
+            "warning: `quality` is a compatibility command; use `codesheriff`.",
+            file=sys.stderr,
+        )
     parser.add_argument(
         "--version", action="version", version=f"The Code Sheriff {__version__}"
     )
@@ -157,6 +166,76 @@ def main(argv: Sequence[str] | None = None) -> int:
     cache_p.add_argument(
         "action", choices=["status", "clean"], nargs="?", default="status"
     )
+    cache_p.add_argument(
+        "--provenance",
+        action="store_true",
+        help="include local cache age and provenance",
+    )
+
+    policy_p = sub.add_parser(
+        "policy", help="verify a signed organization policy bundle"
+    )
+    policy_cmd = policy_p.add_subparsers(dest="policy_command", required=True)
+    policy_verify = policy_cmd.add_parser(
+        "verify", help="verify an HMAC-SHA256 policy bundle"
+    )
+    policy_verify.add_argument("--bundle", type=Path, required=True)
+    policy_verify.add_argument(
+        "--key", default=None, help="signing key (or QUALITY_POLICY_KEY)"
+    )
+
+    trace_p = sub.add_parser("trace", help="export structured local agent evidence")
+    trace_cmd = trace_p.add_subparsers(dest="trace_command", required=True)
+    trace_export = trace_cmd.add_parser(
+        "export", help="write a deterministic trace JSON"
+    )
+    trace_export.add_argument("--output", type=Path, default=None)
+
+    redact_p = sub.add_parser(
+        "redact", help="preview report redaction without writing output"
+    )
+    redact_p.add_argument("--input", type=Path, default=None)
+
+    risk_p = sub.add_parser(
+        "risk", help="show changed-file auth, authorization, and payment zones"
+    )
+    risk_p.add_argument(
+        "--paths", default="", help="comma-separated repository-relative paths"
+    )
+
+    sarif_p = sub.add_parser(
+        "sarif", help="import or export baseline findings with metadata"
+    )
+    sarif_cmd = sarif_p.add_subparsers(dest="sarif_command", required=True)
+    sarif_import = sarif_cmd.add_parser("import-baseline", help="read a SARIF baseline")
+    sarif_import.add_argument("--input", type=Path, required=True)
+    sarif_export = sarif_cmd.add_parser(
+        "export-baseline", help="write a SARIF baseline"
+    )
+    sarif_export.add_argument("--output", type=Path, default=None)
+
+    fleet_p = sub.add_parser(
+        "fleet", help="export opt-in privacy-preserving fleet metrics"
+    )
+    fleet_cmd = fleet_p.add_subparsers(dest="fleet_command", required=True)
+    fleet_export = fleet_cmd.add_parser(
+        "export", help="write aggregate metrics without source data"
+    )
+    fleet_export.add_argument("--output", type=Path, default=None)
+    fleet_export.add_argument(
+        "--opt-in", action="store_true", help="confirm local metrics export"
+    )
+
+    benchmark_p = sub.add_parser(
+        "benchmark", help="static-only OSS checkout corpus inventory"
+    )
+    benchmark_p.add_argument(
+        "--root", dest="benchmark_roots", action="append", type=Path
+    )
+    targets_p = sub.add_parser(
+        "targets", help="select affected existing monorepo workspaces"
+    )
+    targets_p.add_argument("--paths", default="", help="comma-separated changed paths")
 
     fmt = sub.add_parser("format", help="run formatters")
     fmt.add_argument("--check", action="store_true", default=True)
@@ -263,9 +342,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     sub.add_parser(
         "mcp",
         help=(
-            "MCP stdio server: quality_oracle, quality_run, quality_review, "
-            "quality_merge, quality_pr_comments, quality_finding_context, "
-            "quality_apply_fix, quality_fix, quality_certify"
+            "MCP stdio server: codesheriff_oracle, codesheriff_run, "
+            "codesheriff_review, codesheriff_merge, codesheriff_pr_comments, "
+            "codesheriff_finding_context, codesheriff_apply_fix, "
+            "codesheriff_fix, codesheriff_certify"
         ),
     )
 
@@ -396,6 +476,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     run_p.add_argument(
         "--plan", action="store_true", help="show selected execution without running it"
+    )
+    run_p.add_argument(
+        "--time-budget-seconds",
+        type=int,
+        default=None,
+        help="plan within this budget; only advisory checks may be deferred",
     )
     run_p.add_argument("--language", action="append", dest="languages")
     run_p.add_argument(
@@ -581,6 +667,79 @@ def main(argv: Sequence[str] | None = None) -> int:
         from quality_gates.github_app import cli_github_app
 
         return cli_github_app(args)
+    if args.command == "policy":
+        from quality_gates.product import verify_policy_bundle
+
+        key = args.key or os.environ.get("QUALITY_POLICY_KEY", "")
+        if not key:
+            print("policy verify requires --key or QUALITY_POLICY_KEY", file=sys.stderr)
+            return 2
+        payload = verify_policy_bundle(args.bundle, key)
+        print(json.dumps(payload, indent=2))
+        return 0 if payload["valid"] else 1
+    if args.command == "trace":
+        from quality_gates.product import export_trace
+
+        payload = export_trace(root)
+        output = args.output or root / ".quality-reports" / "agent-trace.json"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(output)
+        return 0
+    if args.command == "redact":
+        from quality_gates.product import redaction_preview
+
+        source = args.input or root / ".quality-reports" / "quality-report.json"
+        print(json.dumps(redaction_preview(source), indent=2))
+        return 0
+    if args.command == "risk":
+        from quality_gates.product import risk_zones
+
+        paths = _csv(args.paths) or [
+            item.path for item in discover_changes(root).changes
+        ]
+        print(json.dumps(risk_zones(paths), indent=2))
+        return 0
+    if args.command == "sarif":
+        from quality_gates.product import sarif_baseline
+
+        payload = sarif_baseline(
+            root, args.input if args.sarif_command == "import-baseline" else None
+        )
+        if args.sarif_command == "export-baseline":
+            output = args.output or root / ".quality-reports" / "sarif-baseline.json"
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            print(output)
+        else:
+            print(json.dumps(payload, indent=2))
+        return 0
+    if args.command == "fleet":
+        from quality_gates.product import fleet_metrics
+
+        if not args.opt_in:
+            print("fleet export requires explicit --opt-in", file=sys.stderr)
+            return 2
+        payload = fleet_metrics(root)
+        output = args.output or root / ".quality-reports" / "fleet-metrics.json"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(output)
+        return 0
+    if args.command == "benchmark":
+        from quality_gates.product import static_benchmark
+
+        roots = args.benchmark_roots or [root]
+        print(json.dumps(static_benchmark(roots, config), indent=2))
+        return 0
+    if args.command == "targets":
+        from quality_gates.product import select_monorepo_targets
+
+        paths = _csv(args.paths) or [
+            item.path for item in discover_changes(root).changes
+        ]
+        print(json.dumps(select_monorepo_targets(root, paths), indent=2))
+        return 0
     if args.command in {"init", "setup"}:
         return _onboard(root, args)
     if args.command == "mcp":
@@ -688,7 +847,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "doctor":
         return _doctor(root, config, install=args.install, as_json=args.json)
     if args.command == "cache":
-        payload = clean_cache() if args.action == "clean" else cache_status()
+        if args.provenance and args.action == "status":
+            from quality_gates.product import cache_provenance
+
+            payload = cache_provenance(
+                cache_dir() / "results-v1", offline=config.offline
+            )
+        else:
+            payload = clean_cache() if args.action == "clean" else cache_status()
         if args.json:
             print(json.dumps(payload, indent=2))
         else:
@@ -879,7 +1045,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             if manifest is not None
             else None
         )
-        plan = build_plan(gates, config, manifest)
+        plan = build_plan(
+            gates,
+            config,
+            manifest,
+            root=root,
+            time_budget_seconds=args.time_budget_seconds,
+        )
         write_plan(root, plan)
         if args.plan:
             if args.json:
@@ -887,6 +1059,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             else:
                 print(render_plan(plan))
             return 0
+        gates = [item.name for item in plan if item.status == "selected"]
         languages = _resolve_languages(root, config, args.languages, changed)
         results = []
         prior = []
@@ -1242,7 +1415,7 @@ def _watch(root: Path, config: QualityConfig, *, interval: float) -> int:
     from quality_gates.watch import watch_loop
 
     def _rerun() -> None:
-        print("change detected — quality run --skip review", flush=True)
+        print("change detected — codesheriff run --skip review", flush=True)
         main(["--root", str(root), "run", "--skip", "review"])
 
     print(f"watching {root} every {interval}s (Ctrl-C to stop)", flush=True)
@@ -1396,7 +1569,7 @@ def _doctor_render_console(
         extra = row["version"] or row["path"] or "not on PATH"
         print(f"  {row['tool']:<{width}}  {mark:<8}  {requirement:<8}  {extra}")
     print(
-        "\nTip: quality doctor --install downloads gitleaks, osv-scanner, golangci-lint, and Java jars."
+        "\nTip: codesheriff doctor --install downloads gitleaks, osv-scanner, golangci-lint, and Java jars."
     )
 
 
@@ -1476,11 +1649,11 @@ def _onboard(root: Path, args: argparse.Namespace) -> int:
         if getattr(args, "auto_merge", False):
             print("GitHub auto-merge: land PRs when `quality certify` is ready.")
         print(
-            "Need to troubleshoot? Run `quality doctor` or "
-            "`quality report` after the first check."
+            "Need to troubleshoot? Run `codesheriff doctor` or "
+            "`codesheriff report` after the first check."
         )
     else:
-        print("Next: quality run --skip review && quality baseline")
+        print("Next: codesheriff run --skip review && codesheriff baseline")
     if args.command == "setup" and getattr(args, "app", False):
         from quality_gates.github_app import cli_github_app
 

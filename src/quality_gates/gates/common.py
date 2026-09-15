@@ -372,7 +372,7 @@ def tool_or_skip(
         return path
     return skip_result(
         gate,
-        f"{name} is not installed — run `quality doctor --install` or install the {language} toolchain",
+        f"{name} is not installed — run `codesheriff doctor --install` or install the {language} toolchain",
         tool=name,
     )
 

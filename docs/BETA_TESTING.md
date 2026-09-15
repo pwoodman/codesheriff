@@ -12,8 +12,8 @@ Use a temporary directory outside the project you are developing:
 ```bash
 tmp="$(mktemp -d)"
 git clone --depth 1 https://github.com/psf/requests.git "$tmp/requests"
-QUALITY_TRUST=untrusted quality --root "$tmp/requests" doctor
-QUALITY_TRUST=untrusted quality --root "$tmp/requests" run \
+QUALITY_TRUST=untrusted codesheriff --root "$tmp/requests" doctor
+QUALITY_TRUST=untrusted codesheriff --root "$tmp/requests" run \
   --skip review,test,compile,coverage,ui
 rm -rf "$tmp"
 ```
@@ -27,10 +27,10 @@ commit, push, open pull requests, or change the source tree. Keep
 Run these checks against every candidate repository:
 
 ```bash
-QUALITY_TRUST=untrusted quality --root "$REPO" detect
-QUALITY_TRUST=untrusted quality --root "$REPO" security
-QUALITY_TRUST=untrusted quality --root "$REPO" audit
-QUALITY_TRUST=untrusted quality --root "$REPO" report
+QUALITY_TRUST=untrusted codesheriff --root "$REPO" detect
+QUALITY_TRUST=untrusted codesheriff --root "$REPO" security
+QUALITY_TRUST=untrusted codesheriff --root "$REPO" audit
+QUALITY_TRUST=untrusted codesheriff --root "$REPO" report
 ```
 
 `test`, `compile`, `coverage`, configured advanced commands, and plugin workers
@@ -42,7 +42,7 @@ For a project you trust, use a separate disposable clone and review the
 generated command list before enabling:
 
 ```bash
-QUALITY_TRUST=trusted quality --root "$REPO" run --skip review
+QUALITY_TRUST=trusted codesheriff --root "$REPO" run --skip review
 ```
 
 ## Suggested OSS corpus

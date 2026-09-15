@@ -31,14 +31,14 @@ _GATE_ORDER = (
 )
 
 _AUTOFIX_COMMAND = {
-    "format": "quality format --write",
-    "version": "quality bump auto",
+    "format": "codesheriff format --write",
+    "version": "codesheriff bump auto",
 }
 
 _GATE_INSTRUCTION = {
-    "format": "Run `quality fix` (or `quality format --write`) — this is automatic.",
-    "version": "Run `quality bump auto` and mention the version in CHANGELOG.md.",
-    "lint": "Apply the suggested fix at each path:line, then `quality lint`.",
+    "format": "Run `codesheriff fix` (or `codesheriff format --write`) — this is automatic.",
+    "version": "Run `codesheriff bump auto` and mention the version in CHANGELOG.md.",
+    "lint": "Apply the suggested fix at each path:line, then `codesheriff lint`.",
     "regex": "Remove or rewrite the unsafe API; do not `# quality:ignore` secrets.",
     "packages": "Replace the risky/undeclared import with a declared, maintained package.",
     "compile": "Fix the compile error so the tree type-checks and builds.",
@@ -48,8 +48,8 @@ _GATE_INSTRUCTION = {
     "dry": "Extract one shared helper for the duplicated block.",
     "impact": "Update or test every consumer the impact graph named.",
     "audit": "Fix the evidence-backed audit defect; see audit.md for the scenario.",
-    "merge": "Rebase onto the base branch so `quality merge` is clean.",
-    "review": "Address the review finding, then `quality review`.",
+    "merge": "Rebase onto the base branch so `codesheriff merge` is clean.",
+    "review": "Address the review finding, then `codesheriff review`.",
     "comments": "Apply the suggestion patch or reply and resolve the thread.",
 }
 
@@ -63,7 +63,7 @@ def autofix_command(row: dict[str, Any]) -> str | None:
     ):
         finding_id = row.get("id")
         if finding_id:
-            return f"quality apply --id {finding_id}"
+            return f"codesheriff apply --id {finding_id}"
     return None
 
 
@@ -80,15 +80,16 @@ def build_playbook(payload: dict[str, Any]) -> dict[str, Any]:
             continue
         command = _AUTOFIX_COMMAND.get(gate)
         if command is None and items:
-            command = items[0].get("verify") or f"quality {gate}"
+            command = items[0].get("verify") or f"codesheriff {gate}"
         steps.append(
             {
                 "gate": gate,
                 "count": len(items),
                 "autofix": gate in _AUTOFIX_COMMAND,
-                "command": ("quality fix" if gate == "format" else command),
+                "command": ("codesheriff fix" if gate == "format" else command),
                 "instruction": _GATE_INSTRUCTION.get(
-                    gate, f"Fix {gate} findings, then re-run `quality oracle --run`."
+                    gate,
+                    f"Fix {gate} findings, then re-run `codesheriff oracle --run`.",
                 ),
                 "findings": [_brief(item) for item in items[:8]],
             }
@@ -101,8 +102,8 @@ def build_playbook(payload: dict[str, Any]) -> dict[str, Any]:
                 "gate": gate,
                 "count": len(items),
                 "autofix": False,
-                "command": f"quality {gate}",
-                "instruction": f"Fix {gate} findings, then re-run `quality oracle --run`.",
+                "command": f"codesheriff {gate}",
+                "instruction": f"Fix {gate} findings, then re-run `codesheriff oracle --run`.",
                 "findings": [_brief(item) for item in items[:8]],
             }
         )
@@ -113,7 +114,7 @@ def build_playbook(payload: dict[str, Any]) -> dict[str, Any]:
             "gate": None,
             "count": 0,
             "autofix": False,
-            "command": "quality oracle --run",
+            "command": "codesheriff oracle --run",
             "instruction": "All blocking gates are green.",
             "findings": [],
         }

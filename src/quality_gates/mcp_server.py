@@ -16,9 +16,9 @@ from quality_gates.oracle import (
 
 TOOLS = [
     {
-        "name": "quality_oracle",
+        "name": "codesheriff_oracle",
         "description": (
-            "Read the last quality-gates run and return remaining blocking "
+            "Read the last CodeSheriff run and return remaining blocking "
             "findings, a fix playbook (next action first), and a merge "
             "certificate. Iterate until green is true and certificate.ready."
         ),
@@ -33,9 +33,9 @@ TOOLS = [
         },
     },
     {
-        "name": "quality_run",
+        "name": "codesheriff_run",
         "description": (
-            "Run quality gates (same as `quality run`). Optional only/skip lists. "
+            "Run CodeSheriff (same as `codesheriff run`). Optional only/skip lists. "
             "Returns remaining blockers after the run."
         ),
         "inputSchema": {
@@ -48,7 +48,7 @@ TOOLS = [
         },
     },
     {
-        "name": "quality_review",
+        "name": "codesheriff_review",
         "description": "Run the AI/heuristic review gate against the review base.",
         "inputSchema": {
             "type": "object",
@@ -59,7 +59,7 @@ TOOLS = [
         },
     },
     {
-        "name": "quality_finding_context",
+        "name": "codesheriff_finding_context",
         "description": (
             "Pack one finding (what/where/why/fix/patch/verify) for a coding agent. "
             "Pass id to select; otherwise the first blocker."
@@ -70,10 +70,10 @@ TOOLS = [
         },
     },
     {
-        "name": "quality_apply_fix",
+        "name": "codesheriff_apply_fix",
         "description": (
             "Apply a finding's patch to the working tree. Pass finding id from "
-            "quality_finding_context. Re-run quality_oracle after."
+            "codesheriff_finding_context. Re-run codesheriff_oracle after."
         ),
         "inputSchema": {
             "type": "object",
@@ -81,7 +81,7 @@ TOOLS = [
         },
     },
     {
-        "name": "quality_merge",
+        "name": "codesheriff_merge",
         "description": (
             "Dry-merge HEAD into the base branch with git merge-tree. Reports "
             "textual conflicts and optionally compile/impact on the merged tree. "
@@ -97,10 +97,10 @@ TOOLS = [
         },
     },
     {
-        "name": "quality_fix",
+        "name": "codesheriff_fix",
         "description": (
             "Apply safe automatic remediations: format --write, ruff --fix, "
-            "and finding patches. Then re-run quality_oracle."
+            "and finding patches. Then re-run codesheriff_oracle."
         ),
         "inputSchema": {
             "type": "object",
@@ -113,7 +113,7 @@ TOOLS = [
         },
     },
     {
-        "name": "quality_certify",
+        "name": "codesheriff_certify",
         "description": (
             "Read or refresh the merge certificate. ready/auto_merge=ready "
             "means the change can be auto-merged if The Code Sheriff is required."
@@ -121,11 +121,11 @@ TOOLS = [
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
-        "name": "quality_pr_comments",
+        "name": "codesheriff_pr_comments",
         "description": (
             "List unresolved GitHub review threads on the current pull request "
             "(Greptile, BugBot, humans, Sheriff). Apply suggestion patches with "
-            "quality_apply_fix, then re-run quality_oracle."
+            "codesheriff_apply_fix, then re-run codesheriff_oracle."
         ),
         "inputSchema": {
             "type": "object",
@@ -171,7 +171,7 @@ def handle(
             {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "the-codesheriff", "version": __version__},
+                "serverInfo": {"name": "codesheriff", "version": __version__},
             },
         )
     if method == "notifications/initialized" or method == "exit":
@@ -209,12 +209,13 @@ def handle(
 def _call_tool(
     name: str, args: dict[str, Any], runner: Callable[[list[str]], int]
 ) -> str:
-    if name == "quality_oracle":
+    name = name.replace("quality_", "codesheriff_", 1)
+    if name == "codesheriff_oracle":
         payload = remaining_from_reports(_root())
         if args.get("prompt"):
             return render_prompt(payload)
         return json.dumps(payload, indent=2)
-    if name == "quality_run":
+    if name == "codesheriff_run":
         argv = ["run"]
         if args.get("only"):
             argv.extend(["--only", str(args["only"])])
@@ -226,7 +227,7 @@ def _call_tool(
         payload = remaining_from_reports(_root())
         payload["exit_code"] = code
         return json.dumps(payload, indent=2)
-    if name == "quality_review":
+    if name == "codesheriff_review":
         argv = ["review"]
         if args.get("base"):
             argv.extend(["--base", str(args["base"])])
@@ -236,10 +237,10 @@ def _call_tool(
         payload = remaining_from_reports(_root())
         payload["exit_code"] = code
         return json.dumps(payload, indent=2)
-    if name == "quality_finding_context":
+    if name == "codesheriff_finding_context":
         finding_id = str(args["id"]) if args.get("id") else None
         return json.dumps(finding_from_reports(_root(), finding_id), indent=2)
-    if name == "quality_apply_fix":
+    if name == "codesheriff_apply_fix":
         from quality_gates.models import Finding
         from quality_gates.review.apply import apply_and_verify
 
@@ -260,7 +261,7 @@ def _call_tool(
         verified = apply_and_verify(_root(), finding)
         verified["id"] = row.get("id")
         return json.dumps(verified, indent=2)
-    if name == "quality_merge":
+    if name == "codesheriff_merge":
         argv = ["merge"]
         if args.get("base"):
             argv.extend(["--base", str(args["base"])])
@@ -276,17 +277,17 @@ def _call_tool(
         payload = remaining_from_reports(_root())
         payload["exit_code"] = code
         return json.dumps(payload, indent=2)
-    if name == "quality_fix":
+    if name == "codesheriff_fix":
         from quality_gates.autofix import run_autofix
 
         payload = run_autofix(_root(), apply_patches=args.get("patches") is not False)
         remaining = remaining_from_reports(_root())
         remaining["autofix"] = payload
         return json.dumps(remaining, indent=2)
-    if name == "quality_certify":
+    if name == "codesheriff_certify":
         payload = remaining_from_reports(_root())
         return json.dumps(payload.get("certificate") or payload, indent=2)
-    if name == "quality_pr_comments":
+    if name == "codesheriff_pr_comments":
         argv = ["comments"]
         if args.get("fail"):
             argv.append("--fail")

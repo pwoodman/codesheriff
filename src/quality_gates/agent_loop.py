@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-LOOP_MARKER = "the-code-sheriff:agent-loop"
+LOOP_MARKER = "codesheriff:agent-loop"
 
 MCP_CONFIG = {
     "mcpServers": {
-        "the-code-sheriff": {
-            "command": "quality",
+        "codesheriff": {
+            "command": "codesheriff",
             "args": ["mcp"],
         }
     }
@@ -19,11 +19,11 @@ MCP_CONFIG = {
 LOOP_BODY = """Chat is not proof. After edits, loop until the oracle is green and
 `certificate.ready` is true:
 
-1. `quality fix` (format / safe lint autofix / finding patches)
-2. `quality oracle --run --prompt` (or MCP `quality_run` then `quality_oracle`)
-3. Do **only** the playbook `next` action (`quality_finding_context` / `quality_apply_fix`)
+1. `codesheriff fix` (format / safe lint autofix / finding patches)
+2. `codesheriff oracle --run --prompt` (or MCP `codesheriff_run` then `codesheriff_oracle`)
+3. Do **only** the playbook `next` action (`codesheriff_finding_context` / `codesheriff_apply_fix`)
 4. Re-run until `green` is true and `certificate.auto_merge` is `ready`
-5. If `quality merge` reports textual-conflict, rebase onto the base branch
+5. If `codesheriff merge` reports textual-conflict, rebase onto the base branch
 6. Unresolved GitHub review comments are remaining work
 7. Only then commit, open a PR, or auto-merge
 
@@ -33,7 +33,7 @@ rules automatically.
 """
 
 CURSOR_RULE = f"""---
-description: Treat The Code Sheriff as the merge oracle. Run quality gates before claiming work is done.
+description: Treat The Code Sheriff as the merge oracle. Run CodeSheriff before claiming work is done.
 alwaysApply: true
 ---
 
@@ -58,36 +58,36 @@ The gates are the oracle. Do not treat the chat transcript as a passing review.
 ## Loop
 
 ```bash
-quality fix
-quality oracle --run --prompt
+codesheriff fix
+codesheriff oracle --run --prompt
 # do only the Next action
-quality oracle --run
-quality certify
+codesheriff oracle --run
+codesheriff certify
 ```
 
-Or MCP: `quality_fix` → `quality_run` → `quality_oracle` →
-`quality_finding_context` / `quality_apply_fix` → `quality_certify` until
-`green` and `certificate.ready` are true. `quality_merge` dry-merges into
-main; `quality_pr_comments` lists unresolved review threads.
+Or MCP: `codesheriff_fix` → `codesheriff_run` → `codesheriff_oracle` →
+`codesheriff_finding_context` / `codesheriff_apply_fix` → `codesheriff_certify`
+until `green` and `certificate.ready` are true. `codesheriff_merge` dry-merges
+into main; `codesheriff_pr_comments` lists unresolved review threads.
 
 ## Rules
 
 - Mechanical gates (format, lint, regex, packages, DRY, security, compile,
   impact, tests, coverage, audit, UI, version, merge) beat model self-assessment.
-- Prefer `quality fix` before hand-editing format/lint.
+- Prefer `codesheriff fix` before hand-editing format/lint.
 - Custom markdown in `.quality/rules/` is enforced on the change set.
 - `AGENTS.md`, `CLAUDE.md`, and `.cursor/rules` are ingested as review rules.
 - Never skip the oracle because unit tests "looked fine" in conversation.
 - Rebase when merge reports `textual-conflict`. Do not invent a merge.
-- Auto-merge only when `quality certify` says `auto_merge: ready`.
+- Auto-merge only when `codesheriff certify` says `auto_merge: ready`.
 """
 
 AGENTS_MD = f"""<!-- {LOOP_MARKER} -->
 
 # Agent loop
 
-This repo uses [The Code Sheriff](https://github.com/pwoodman/the-code-sheriff).
-After edits: `quality fix` then `quality oracle --run --prompt`. Do only the
+This repo uses [The Code Sheriff](https://github.com/pwoodman/codesheriff).
+After edits: `codesheriff fix` then `codesheriff oracle --run --prompt`. Do only the
 Next action. Loop until `green` and `certificate.ready`. Do not commit on chat
 confidence. Works with Cursor, Claude Code, Copilot, Codex, OpenCode, Qwen,
 DeepSeek harness, and VS Code.

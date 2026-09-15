@@ -24,7 +24,7 @@ def print_report(
     results, policy = load_results(report_dir)
     if not results:
         print(
-            "no .quality-reports/quality-report.json — run `quality run` first",
+            "no .quality-reports/quality-report.json — run `codesheriff run` first",
             file=sys.stderr,
         )
         return 2

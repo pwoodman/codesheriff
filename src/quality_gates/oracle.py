@@ -1,4 +1,4 @@
-"""Agent oracle: remaining blockers until quality run is green."""
+"""Agent oracle: remaining blockers until codesheriff run is green."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def remaining_from_results(
         )
     else:
         instruction = nxt.get("instruction") or "Fix the blocking findings"
-        payload["next"] = f"{instruction} Then run `quality oracle --run` again."
+        payload["next"] = f"{instruction} Then run `codesheriff oracle --run` again."
     return payload
 
 
@@ -82,7 +82,7 @@ def remaining_from_reports(root: Path) -> dict[str, Any]:
     _attach_pr_comments(root, payload)
     if not results and not payload.get("review") and not payload.get("comments"):
         payload["green"] = False
-        payload["next"] = "no .quality-reports — run `quality oracle --run` first"
+        payload["next"] = "no .quality-reports — run `codesheriff oracle --run` first"
     payload["playbook"] = build_playbook(payload)
     payload["certificate"] = build_certificate(payload, root=root)
     if payload.get("green") and payload["certificate"].get("ready"):
@@ -93,7 +93,9 @@ def remaining_from_reports(root: Path) -> dict[str, Any]:
     elif not payload.get("green"):
         instruction = (payload["playbook"].get("next") or {}).get("instruction")
         if instruction and "oracle --run" not in str(payload.get("next") or ""):
-            payload["next"] = f"{instruction} Then run `quality oracle --run` again."
+            payload["next"] = (
+                f"{instruction} Then run `codesheriff oracle --run` again."
+            )
     with suppress(OSError):
         write_certificate(root, payload)
     return payload
@@ -110,7 +112,7 @@ def finding_from_reports(root: Path, finding_id: str | None = None) -> dict[str,
         if isinstance(item, dict):
             pool.append(item)
     if not pool:
-        return {"error": "no findings", "next": "run `quality oracle --run` first"}
+        return {"error": "no findings", "next": "run `codesheriff oracle --run` first"}
     if finding_id:
         for item in pool:
             if str(item.get("id") or "") == finding_id:
@@ -156,7 +158,7 @@ def _attach_pr_comments(root: Path, payload: dict[str, Any]) -> None:
         payload["green"] = False
         payload["next"] = (
             "Fix blocking gates and unresolved PR review comments, "
-            "then run `quality oracle --run` again."
+            "then run `codesheriff oracle --run` again."
         )
     except (OSError, ValueError, json.JSONDecodeError, TypeError, KeyError):
         return
@@ -182,7 +184,7 @@ def render_prompt(payload: dict[str, Any]) -> str:
     playbook = payload.get("playbook") or {}
     nxt = playbook.get("next") or {}
     lines = [
-        "You are fixing a repository until `quality oracle --run` reports green.",
+        "You are fixing a repository until `codesheriff oracle --run` reports green.",
         "Do the next action only. Re-run the oracle after that batch. Do not nibble style.",
     ]
     if nxt.get("instruction"):
@@ -212,7 +214,7 @@ def render_prompt(payload: dict[str, Any]) -> str:
         for item in comment_findings[:20]:
             if isinstance(item, dict):
                 lines.append(_bullet(item))
-    lines.append("Re-run `quality oracle --run` after each fix batch.")
+    lines.append("Re-run `codesheriff oracle --run` after each fix batch.")
     return "\n".join(lines)
 
 

@@ -264,7 +264,7 @@ def _finding(
         message=message,
         reason=reason,
         suggestion=suggestion,
-        verify="quality review",
+        verify="codesheriff review",
     )
 
 

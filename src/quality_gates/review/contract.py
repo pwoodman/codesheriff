@@ -15,7 +15,7 @@ def verify_command(finding: Finding) -> str:
         return finding.verify
     gate = finding.gate or "run"
     if gate == "review":
-        return "quality review"
+        return "codesheriff review"
     return f"quality {gate}"
 
 

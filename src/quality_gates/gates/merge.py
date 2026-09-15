@@ -166,7 +166,7 @@ def _conflict_findings(
                 message=message,
                 severity="error",
                 verify=rebase,
-                suggestion=f"Rebase onto {theirs} and resolve {path}, then re-run quality oracle.",
+                suggestion=f"Rebase onto {theirs} and resolve {path}, then re-run codesheriff oracle.",
             )
         )
     if not paths:
@@ -245,7 +245,7 @@ def _verify_merged(
                     severity="error",
                     verify=f"git fetch --prune && git rebase {theirs} && quality impact",
                     suggestion=(
-                        "Stage new modules with `git add`, then re-run `quality merge`."
+                        "Stage new modules with `git add`, then re-run `codesheriff merge`."
                         if extra
                         else "Update or test every consumer the impact graph named."
                     ),

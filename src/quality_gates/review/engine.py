@@ -530,8 +530,8 @@ def render_review(
     lines.extend(
         [
             "",
-            "Fix with `quality oracle --run --prompt`, or send one finding to an "
-            "agent via MCP `quality_finding_context`. Re-run `quality oracle --run` "
+            "Fix with `codesheriff oracle --run --prompt`, or send one finding to an "
+            "agent via MCP `codesheriff_finding_context`. Re-run `codesheriff oracle --run` "
             "until green.",
             "",
         ]
