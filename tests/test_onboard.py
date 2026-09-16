@@ -17,14 +17,14 @@ PIN = "0123456789abcdef0123456789abcdef01234567"
 
 
 def test_resolve_source_defaults_to_this_repo() -> None:
-    assert resolve_source() == "pwoodman/the-code-sheriff"
-    assert resolve_source(org="REPLACE_ORG") == "pwoodman/the-code-sheriff"
-    assert resolve_source(org="acme") == "acme/the-code-sheriff"
+    assert resolve_source() == "pwoodman/codesheriff"
+    assert resolve_source(org="REPLACE_ORG") == "pwoodman/codesheriff"
+    assert resolve_source(org="acme") == "acme/codesheriff"
     assert resolve_source(source="acme/gates") == "acme/gates"
 
 
 def test_resolve_pin_keeps_explicit_sha() -> None:
-    assert resolve_pin("pwoodman/the-code-sheriff", PIN) == PIN
+    assert resolve_pin("pwoodman/codesheriff", PIN) == PIN
 
 
 def test_consumer_defaults_are_adopt_and_local() -> None:
@@ -64,7 +64,7 @@ def test_init_rewrites_placeholder_workflow(tmp_path: Path, monkeypatch) -> None
     path = tmp_path / ".github" / "workflows" / "quality.yml"
     path.parent.mkdir(parents=True)
     path.write_text(
-        "uses: pwoodman/the-code-sheriff/.github/workflows/quality.yml@REPLACE_FULL_COMMIT_SHA\n",
+        "uses: pwoodman/codesheriff/.github/workflows/quality.yml@REPLACE_FULL_COMMIT_SHA\n",
         encoding="utf-8",
     )
     assert main(["--root", str(tmp_path), "init"]) == 0
@@ -94,7 +94,7 @@ def test_setup_prints_a_clear_next_step(tmp_path: Path, monkeypatch, capsys) -> 
     output = capsys.readouterr().out
     assert "The Code Sheriff is ready." in output
     assert "Open a pull request" in output
-    assert "quality doctor" in output
+    assert "codesheriff doctor" in output
 
 
 def test_github_repo_from_ssh_remote(tmp_path: Path) -> None:
@@ -145,24 +145,24 @@ def test_setup_writes_agent_loop_files(tmp_path: Path, monkeypatch) -> None:
 
     assert init_repo(tmp_path, hooks=True, agents=True) == 0
     mcp = (tmp_path / ".cursor" / "mcp.json").read_text(encoding="utf-8")
-    assert '"quality"' in mcp
+    assert '"codesheriff"' in mcp
     assert "mcp" in mcp
     rule = (tmp_path / ".cursor" / "rules" / "the-code-sheriff.mdc").read_text(
         encoding="utf-8"
     )
-    assert "quality oracle" in rule
+    assert "codesheriff oracle" in rule
     skill = (
         tmp_path / ".cursor" / "skills" / "the-code-sheriff" / "SKILL.md"
     ).read_text(encoding="utf-8")
-    assert "quality_oracle" in skill
-    assert "quality_merge" in skill
-    assert "quality_pr_comments" in skill
+    assert "codesheriff_oracle" in skill
+    assert "codesheriff_merge" in skill
+    assert "codesheriff_pr_comments" in skill
     assert (tmp_path / ".mcp.json").is_file()
     assert (tmp_path / "AGENTS.md").is_file()
     assert (tmp_path / "CLAUDE.md").is_file()
     assert (tmp_path / ".github" / "copilot-instructions.md").is_file()
     assert (tmp_path / ".quality" / "rules" / "clean-code.md").is_file()
-    assert "quality_fix" in skill or "quality fix" in skill
+    assert "codesheriff_fix" in skill or "codesheriff fix" in skill
     assert "certificate" in skill
 
 
@@ -176,7 +176,7 @@ def test_setup_keeps_existing_agents_md(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_workflow_yaml_names_the_check() -> None:
-    text = workflow_yaml("pwoodman/the-code-sheriff", PIN)
+    text = workflow_yaml("pwoodman/codesheriff", PIN)
     assert f"name: {CHECK_NAME}" in text
     assert f"@{PIN}" in text
 

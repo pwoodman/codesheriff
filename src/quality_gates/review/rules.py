@@ -10,6 +10,7 @@ from quality_gates.agent_loop import LOOP_MARKER
 from quality_gates.config import QualityConfig
 
 MAX_AGENT_BODY = 8_000
+LOOP_MARKER_SCAN_LIMIT = 800
 _AGENT_FILES = (
     "AGENTS.md",
     "CLAUDE.md",
@@ -106,7 +107,10 @@ def _rule_from_markdown(root: Path, path: Path) -> ReviewRule | None:
         text = path.read_text(encoding="utf-8")
     except OSError:
         return None
-    if LOOP_MARKER in text[:800]:
+    if (
+        LOOP_MARKER in text[:LOOP_MARKER_SCAN_LIMIT]
+        or "the-code-sheriff:agent-loop" in text[:LOOP_MARKER_SCAN_LIMIT]
+    ):
         return None
     meta, body = _front_matter(text)
     body = body.strip()

@@ -15,7 +15,7 @@ def test_autofix_formats_python(tmp_path: Path) -> None:
     (tmp_path / "app.py").write_text("x=1\n", encoding="utf-8")
     payload = run_autofix(tmp_path, QualityConfig(), apply_patches=False)
     assert payload["applied"]
-    assert payload["next"] == "quality oracle --run"
+    assert payload["next"] == "codesheriff oracle --run"
 
 
 def test_certify_cli_without_reports(tmp_path: Path, capsys, monkeypatch) -> None:

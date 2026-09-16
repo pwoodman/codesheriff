@@ -25,3 +25,26 @@ def test_ledger_tracks_verified_fixed_and_suppressed(tmp_path) -> None:
     entry = next(iter(ledger["findings"].values()))
     assert entry["state"] == "suppressed"
     assert entry["suppression_reason"] == "approved exception"
+
+
+def test_suppression_ledger_is_append_only_and_records_metadata(tmp_path) -> None:
+    from quality_gates.review.ledger import mark_suppressed
+
+    finding = Finding(gate="review", rule="logic", path="app.py", line=3, message="bug")
+    mark_suppressed(
+        tmp_path,
+        finding,
+        "approved exception",
+        owner="@acme/security",
+        expires="2027-01-01T00:00:00Z",
+    )
+    import json
+
+    ledger = json.loads(
+        (tmp_path / ".quality-reports" / "finding-ledger.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    entry = next(iter(ledger["findings"].values()))
+    assert entry["suppression_owner"] == "@acme/security"
+    assert ledger["events"][0]["expires"] == "2027-01-01T00:00:00Z"

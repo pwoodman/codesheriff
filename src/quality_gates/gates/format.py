@@ -295,7 +295,7 @@ def _java(
     if not jar.is_file():
         return skip_result(
             "format",
-            "google-java-format is not installed — run `quality doctor --install`",
+            "google-java-format is not installed — run `codesheriff doctor --install`",
             tool="google-java-format",
         )
     argv = [java, "-jar", str(jar)]

@@ -1,17 +1,18 @@
 # The Code Sheriff
 
-Project home: https://github.com/pwoodman/the-code-sheriff
+Project home: https://github.com/pwoodman/codesheriff
 
 Polyglot **format → lint → DRY → security → compile → impact → coverage → audit → UI → version → merge → AI review**
-gates. CLI: `quality` (alias: `codesheriff`). Heavy work defaults to **your machine**. GitHub Actions stays cheap unless
+gates. CLI: `codesheriff`. The former `quality` command remains a warning-emitting
+compatibility alias. Heavy work defaults to **your machine**. GitHub Actions stays cheap unless
 you opt in. One command on a new repo:
 
 ```bash
-uvx --from git+https://github.com/pwoodman/the-code-sheriff.git quality setup
+uvx --from git+https://github.com/pwoodman/codesheriff.git codesheriff setup
 ```
 
 That also drops Cursor/Claude MCP, an always-on rule, and a skill so the agent
-loops on `quality oracle` until green. `--no-agents` skips those files.
+loops on `codesheriff oracle` until green. `--no-agents` skips those files.
 
 The GitHub App is optional; see [`docs/GITHUB_APP.md`](docs/GITHUB_APP.md).
 PR comment commands use the `/sheriff` prefix (`/sheriff review`, `/sheriff help`).
@@ -35,20 +36,20 @@ Pandorian-class tools govern **after** a PR exists, for leadership. The Code
 Sheriff sits **in the agent loop**, on your machine, before commit:
 
 ```bash
-quality fix                     # format / safe lint / finding patches
-quality oracle --run --prompt   # or MCP quality_run → quality_oracle
+codesheriff fix                     # format / safe lint / finding patches
+codesheriff oracle --run --prompt   # or MCP codesheriff_run → codesheriff_oracle
 # do only the Next action (including merge conflicts and PR review comments)
-quality oracle --run            # until green is true
-quality certify                 # auto-merge ready when certificate.ready
+codesheriff oracle --run            # until green is true
+codesheriff certify                 # auto-merge ready when certificate.ready
 ```
 
-`quality merge` is in that loop: `git merge-tree` against origin/main before
+`codesheriff merge` is in that loop: `git merge-tree` against origin/main before
 push. GitHub already paints textual conflicts on the PR; Sheriff fails them
 locally for the agent, and locally verifies compile/impact on a clean merge.
-`quality comments` pulls unresolved GitHub review threads (external bots and
+`codesheriff comments` pulls unresolved GitHub review threads (external bots and
 humans) into the same oracle.
 
-`quality setup` writes:
+`codesheriff setup` writes:
 
 | Surface | File |
 | --- | --- |
@@ -62,7 +63,7 @@ humans) into the same oracle.
 
 Those files cover Cursor, Claude Code, Copilot, Codex, OpenCode, Qwen, DeepSeek
 harness, and VS Code. The oracle playbook is the same in every tool: one Next
-action, then re-run. When `quality certify` says `auto_merge: ready` and
+action, then re-run. When `codesheriff certify` says `auto_merge: ready` and
 **The Code Sheriff** is a required check, you can auto-merge the PR.
 
 The same files the agent already follows (`AGENTS.md`, `CLAUDE.md`,
@@ -70,10 +71,10 @@ The same files the agent already follows (`AGENTS.md`, `CLAUDE.md`,
 files **or** `.quality/rules/*.md` — one source of truth, no Confluence
 re-entry.
 
-Put `quality` on PATH so MCP can spawn:
+Put `codesheriff` on PATH so MCP can spawn:
 
 ```bash
-uv tool install git+https://github.com/pwoodman/the-code-sheriff.git
+uv tool install git+https://github.com/pwoodman/codesheriff.git
 ```
 
 ## What is enforced
@@ -126,19 +127,19 @@ Standards: [`standards/`](standards/FORMATTING.md) · [`CRAFT`](standards/CRAFT.
 
 ```bash
 python3 -m pip install -e ".[dev]"
-quality doctor
-quality run --skip review          # full suite on your machine
+codesheriff doctor
+codesheriff run --skip review      # full suite on your machine
 pre-commit install --hook-type pre-commit --hook-type pre-push
 ```
 
 ```bash
-quality bump auto                  # feat/fix/breaking → minor/patch/major
-quality compile                    # runs security first, then builds
-quality ui --list                  # which Playwright/Cypress specs the diff selects
-quality impact                     # who is upstream/downstream of the diff
-quality coverage                   # line coverage vs 80% floor
-quality audit                      # 120-point evidence-backed inspection
-quality report                     # scorecard, performance, issues, recommendations
+codesheriff bump auto              # feat/fix/breaking → minor/patch/major
+codesheriff compile                # runs security first, then builds
+codesheriff ui --list              # which Playwright/Cypress specs the diff selects
+codesheriff impact                 # who is upstream/downstream of the diff
+codesheriff coverage               # line coverage vs 80% floor
+codesheriff audit                  # 120-point evidence-backed inspection
+codesheriff report                 # scorecard, performance, issues, recommendations
 ```
 
 ## GitHub cost knob
@@ -155,10 +156,10 @@ select = "changed"                 # only specs that touch added/changed files
 on_github = false                  # keep browsers off Actions
 ```
 
-`quality run` on Actions with `mode = "local"` only runs `github_gates`
+`codesheriff run` on Actions with `mode = "local"` only runs `github_gates`
 (format, lint, regex, packages, security, impact, audit, version, merge, review, comments). Format, lint, and
 security belong on PRs so secrets, CVEs, SAST, and IaC do not wait for a
-hosted scanner. Force the rest with `quality run --full`,
+hosted scanner. Force the rest with `codesheriff run --full`,
 `QUALITY_CI_FULL=1`, `[quality.ci] mode = "both"`, or Actions → **Quality gates
 (full suite)**. Playwright/Cypress still skip on GitHub unless `on_github = true`
 or `QUALITY_UI_ON_GITHUB=1`.
@@ -174,7 +175,8 @@ Unit tests run on Linux, macOS, and Windows across Python 3.11–3.14 in
 fixtures cover representative ecosystem setup without adding that cost to PRs.
 
 Consumers: [`examples/CONSUMING.md`](examples/CONSUMING.md). Golden paths: [`docs/START.md`](docs/START.md). Required-check setup: [`docs/GITHUB_APP.md`](docs/GITHUB_APP.md).
-For safe beta testing against disposable open-source clones, see [`docs/BETA_TESTING.md`](docs/BETA_TESTING.md).
+For safe beta testing against disposable open-source clones, see [`docs/BETA_TESTING.md`](docs/BETA_TESTING.md) and the
+[100-repository corpus](docs/PRODUCT_EVALUATION.md#static-corpus).
 
 ## Configuration
 

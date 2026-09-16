@@ -51,14 +51,14 @@ def test_finding_contract_and_github_suggestion() -> None:
     unsafe = next(item for item in findings if item.rule == "unsafe-api")
     assert unsafe.reason
     assert unsafe.suggestion
-    assert unsafe.verify == "quality review"
+    assert unsafe.verify == "codesheriff review"
     payload = finding_payload(unsafe)
     assert payload["id"]
     assert "eval" in agent_prompt(unsafe).lower()
     unsafe.patch = "value = ast.literal_eval(user_input)"
     body = _inline_body(unsafe)
     assert "```suggestion" in body
-    assert "quality oracle --prompt" in body
+    assert "codesheriff oracle --prompt" in body
     assert suggestion_fence(unsafe)
 
 

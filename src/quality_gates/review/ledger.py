@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from quality_gates.models import Finding
@@ -49,7 +50,14 @@ def mark_verified_fixed(root: Path, finding: Finding) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
-def mark_suppressed(root: Path, finding: Finding, reason: str) -> None:
+def mark_suppressed(
+    root: Path,
+    finding: Finding,
+    reason: str,
+    *,
+    owner: str = "",
+    expires: str | None = None,
+) -> None:
     """A finding can be suppressed only with explicit reason and tracked state."""
     path = root / ".quality-reports" / "finding-ledger.json"
     try:
@@ -61,5 +69,18 @@ def mark_suppressed(root: Path, finding: Finding, reason: str) -> None:
     row = entries.setdefault(key, {})
     row["state"] = "suppressed"
     row["suppression_reason"] = reason
+    row["suppression_owner"] = owner
+    row["suppression_expires"] = expires
+    events = data.setdefault("events", [])
+    events.append(
+        {
+            "event": "suppressed",
+            "fingerprint": key,
+            "reason": reason,
+            "owner": owner,
+            "expires": expires,
+            "recorded_at": datetime.now(UTC).isoformat(),
+        }
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")

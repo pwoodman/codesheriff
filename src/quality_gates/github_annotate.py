@@ -188,7 +188,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _from_finding(finding: Finding) -> str:
-    title = "/".join(part for part in (finding.gate, finding.rule) if part) or "quality"
+    title = (
+        "/".join(part for part in (finding.gate, finding.rule) if part) or "codesheriff"
+    )
     detail = finding.message or f"{finding.gate} failed"
     if finding.snippet:
         detail += f" At: {finding.snippet}."

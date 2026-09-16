@@ -28,7 +28,7 @@ def enrich_finding(
     if not finding.verify:
         gate = finding.gate or (result.tool if result else None) or "run"
         if gate == "review":
-            finding.verify = "quality review"
+            finding.verify = "codesheriff review"
         else:
             finding.verify = f"quality {gate}"
     if not finding.tool and result is not None:

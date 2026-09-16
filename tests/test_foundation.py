@@ -15,6 +15,8 @@ from quality_gates.adapters import (
 from quality_gates.cli import main
 from quality_gates.config import QualityConfig, load_config
 from quality_gates.detect import detect_languages
+from quality_gates.gates.comments import run_comments
+from quality_gates.identity import DEFAULT_HOME_REPO, REPO_NAME
 from quality_gates.models import GateResult
 from quality_gates.paths import bundled_file
 from quality_gates.registry import (
@@ -24,6 +26,12 @@ from quality_gates.registry import (
     profiles_for_shebang,
 )
 from quality_gates.tool_manifest import load_tool_manifest
+
+
+def test_codesheriff_identity_is_used_by_comment_gate() -> None:
+    assert REPO_NAME == "codesheriff"
+    assert DEFAULT_HOME_REPO == "pwoodman/codesheriff"
+    assert callable(run_comments)
 
 
 def test_registry_has_phase_one_languages_and_aliases() -> None:

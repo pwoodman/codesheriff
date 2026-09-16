@@ -38,7 +38,7 @@ def run_autofix(
         "applied": applied,
         "format_status": format_result.status,
         "patches": patch_notes,
-        "next": "quality oracle --run",
+        "next": "codesheriff oracle --run",
     }
 
 

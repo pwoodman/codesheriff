@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from quality_gates import GATES
@@ -26,6 +26,7 @@ class PlannedTask:
     uncertainty: str | None = None
     fallback_scope: str | None = None
     execution_count: int = 1
+    estimated_ms: int = 0
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -68,6 +69,16 @@ _TRUSTED_ISOLATED_GATES = {
     "resilience",
     "mutation",
     "performance",
+}
+_ESTIMATED_MS = {
+    "format": 2_000,
+    "lint": 8_000,
+    "security": 15_000,
+    "test": 60_000,
+    "compile": 90_000,
+    "coverage": 120_000,
+    "review": 20_000,
+    "ui": 90_000,
 }
 
 
@@ -132,6 +143,7 @@ def _build_selected_task(
         uncertainty=uncertainty,
         fallback_scope=fallback_scope,
         execution_count=1,
+        estimated_ms=_ESTIMATED_MS.get(gate, 5_000),
     )
 
 
@@ -146,6 +158,7 @@ def _build_excluded_task(gate: str) -> PlannedTask:
         status="excluded",
         exclusion_reason="not applicable to changed surface or excluded by configuration",
         execution_count=0,
+        estimated_ms=0,
     )
 
 
@@ -155,6 +168,7 @@ def build_plan(
     manifest: ChangeManifest | None,
     all_gates: tuple[str, ...] | list[str] | None = None,
     root: Path | None = None,
+    time_budget_seconds: int | None = None,
 ) -> list[PlannedTask]:
     paths = tuple(manifest.paths) if manifest else ()
     sorted_gates = order_by_prerequisites(gates)
@@ -174,6 +188,23 @@ def build_plan(
         )
         for gate in sorted_gates
     ]
+    if time_budget_seconds is not None:
+        spent = 0
+        budgeted: list[PlannedTask] = []
+        for item in plan:
+            if item.required or spent + item.estimated_ms <= time_budget_seconds * 1000:
+                spent += item.estimated_ms
+                budgeted.append(item)
+            else:
+                budgeted.append(
+                    replace(
+                        item,
+                        status="deferred",
+                        exclusion_reason="deferred by time budget (advisory checks only)",
+                        execution_count=0,
+                    )
+                )
+        plan = budgeted
 
     pool = list(all_gates or GATES)
     plan.extend(_build_excluded_task(gate) for gate in pool if gate not in selected)
@@ -183,22 +214,26 @@ def build_plan(
 def render_plan(plan: list[PlannedTask]) -> str:
     lines = ["Quality execution plan:"]
     selected_tasks = [t for t in plan if t.status == "selected"]
-    excluded_tasks = [t for t in plan if t.status == "excluded"]
+    excluded_tasks = [t for t in plan if t.status in {"excluded", "deferred"}]
     for item in selected_tasks:
         needs = f"; needs {', '.join(item.prerequisites)}" if item.prerequisites else ""
         reused = f"; reused: {item.reused_evidence}" if item.reused_evidence else ""
         scope_note = f"; scope: {item.fallback_scope}" if item.fallback_scope else ""
         lines.append(
-            f"- {item.name}: {'required' if item.required else 'advisory'}; {item.reason}{needs}; {item.permission}{reused}{scope_note}"
+            f"- {item.name}: {'required' if item.required else 'advisory'}; {item.reason}; estimate {_fmt_estimate(item.estimated_ms)}{needs}; {item.permission}{reused}{scope_note}"
         )
     if excluded_tasks:
         lines.append("\nExcluded gates:")
         for item in excluded_tasks:
-            lines.append(f"- {item.name}: excluded ({item.exclusion_reason})")
+            lines.append(f"- {item.name}: {item.status} ({item.exclusion_reason})")
     lines.append(
         f"\nSummary: {len(selected_tasks)} check(s) selected, {len(excluded_tasks)} excluded."
     )
     return "\n".join(lines)
+
+
+def _fmt_estimate(value: int) -> str:
+    return f"{value / 1000:.0f}s" if value >= 1000 else f"{value}ms"
 
 
 def write_plan(root: Path, plan: list[PlannedTask]) -> Path:

@@ -91,6 +91,8 @@ def render_certificate(certificate: dict[str, Any]) -> str:
             "is a required check, the PR can land without a human re-review of the diff."
         )
     else:
-        lines.append("Do not auto-merge. Run `quality oracle --run --prompt` and fix.")
+        lines.append(
+            "Do not auto-merge. Run `codesheriff oracle --run --prompt` and fix."
+        )
     lines.append("")
     return "\n".join(lines)
