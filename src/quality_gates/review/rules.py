@@ -57,24 +57,36 @@ class ReviewRule:
         )
 
 
+RULES_DIR = ".sheriff/rules"
+LEGACY_RULES_DIR = ".quality/rules"
+
+
 def load_review_rules(root: Path, config: QualityConfig) -> list[ReviewRule]:
     rules: list[ReviewRule] = []
-    directory = root / (config.review_rules_dir or ".quality/rules")
-    if directory.is_dir():
+    configured = config.review_rules_dir or RULES_DIR
+    directories = [root / configured]
+    for name in (RULES_DIR, LEGACY_RULES_DIR):
+        candidate = root / name
+        if candidate not in directories:
+            directories.append(candidate)
+    seen_sources: set[str] = set()
+    for directory in directories:
+        if not directory.is_dir():
+            continue
         for path in sorted(directory.glob("*.md")):
             rule = _rule_from_markdown(root, path)
-            if rule is not None:
+            if rule is not None and rule.source not in seen_sources:
+                seen_sources.add(rule.source)
                 rules.append(rule)
     if getattr(config, "review_ingest_agent_files", True):
-        seen = {rule.source for rule in rules}
         for path in _agent_instruction_paths(root):
             rel = path.relative_to(root).as_posix()
-            if rel in seen:
+            if rel in seen_sources:
                 continue
             rule = _rule_from_markdown(root, path)
             if rule is None:
                 continue
-            seen.add(rel)
+            seen_sources.add(rel)
             rules.append(rule)
     return rules
 

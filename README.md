@@ -259,7 +259,30 @@ ingested too (`ingest_agent_files = true`). Inline `# quality:ignore eval` or
 `.quality/ignore.toml` (via `quality ignore add`) suppress a hit. Last findings
 are stored in `.quality-reports/findings-last.json` and reopen if the snippet
 is still in the tree. `quality eval` writes `.quality-reports/eval/SCORECARD.md`.
+`codesheriff eval --suite sheriffbench` adds the metrics competitors do not
+publish — suppression re-triage rate (does an accepted finding come back after
+unrelated edits shift its line?), closed-loop resolution, and oracle
+termination — to `.quality-reports/eval/SHERIFTBENCH.md`.
 See [`standards/AI_REVIEW.md`](standards/AI_REVIEW.md).
+
+### Everyday loop
+
+- `codesheriff setup [--dry-run]` writes config, workflow, hooks, and agent
+  files. `--dry-run` prints the create/overwrite plan without touching the repo.
+- `codesheriff guard` is the sub-second pre-commit half: it scans only staged
+  bytes for secrets, private keys, tokens, and conflict markers. Wire it into
+  `.pre-commit-config.yaml` for instant feedback; the full suite stays in CI.
+- `codesheriff why <finding-id>` explains a finding from the last run (no
+  re-scan) and prints the exact `codesheriff suppress` command to accept it.
+- `codesheriff suppress <finding-id>` writes a content-anchored waiver, so an
+  accepted false positive stays accepted even when unrelated edits shift its
+  line number on a later PR.
+- `codesheriff replay [run-id]` re-emits the report and merge certificate of a
+  past run from the append-only `.quality-reports/history.json` for audit.
+- `codesheriff run --risk auto` profiles the diff: it widens the gate plan for
+  auth/payment/migration/parser changes and narrows it when nothing risky moved.
+- `codesheriff certify --sign --key $SHERIFF_CERT_KEY` attaches an HMAC-SHA256
+  signature; `certify --verify --key …` checks a stored certificate off-machine.
 
 ## CLI
 
@@ -290,14 +313,19 @@ quality timing accept --test tests/test_app.py::test_ok
 quality oracle [--run] [--prompt]
 quality fix [--no-patches]
 quality apply [--id FINDING]
-quality certify
-quality eval [--suite reviewbench|martian|macroscope|all] [--download] [--llm]
+quality certify [--sign] [--key KEY] [--verify]
+quality guard [--all] [paths ...]
+quality why <finding-id> [--rule RULE] [--path PATH]
+quality replay [run-id] [--last] [--list]
+quality suppress <finding-id> --reason "..." --owner you
+quality migrate
+quality eval [--suite reviewbench|sheriffbench|martian|macroscope|all] [--download] [--llm]
 quality mcp
-quality run [--only security,compile,impact,coverage,audit,ui] [--skip review] [--full]
+quality run [--only security,compile,impact,coverage,audit,ui] [--skip review] [--risk auto] [--full]
 quality report [--format console|markdown|html|json|sarif|junit] [--diff]
 quality watch [--interval 1.5]
 quality cache [status|clean]
-quality setup
+quality setup [--dry-run]
 quality init [--policy adopt]
 quality github-app register|serve|manifest
 codesheriff github-app register|serve|manifest
@@ -355,4 +383,4 @@ AWS/GCP/Azure accounts — those are a different job.
 
 ## License
 
-[MIT](LICENSE). Public at https://github.com/pwoodman/the-code-sheriff
+[MIT](LICENSE). Public at https://github.com/pwoodman/codesheriff

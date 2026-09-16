@@ -46,7 +46,11 @@ def project_root(explicit: str | Path | None = None) -> Path:
         return Path(explicit).resolve()
     cwd = Path.cwd().resolve()
     for candidate in [cwd, *cwd.parents]:
-        if (candidate / "quality.toml").is_file() or (candidate / ".git").exists():
+        if (
+            (candidate / "sheriff.toml").is_file()
+            or (candidate / "quality.toml").is_file()
+            or (candidate / ".git").exists()
+        ):
             return candidate
     return cwd
 

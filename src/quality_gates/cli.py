@@ -8,39 +8,38 @@ import time
 from collections.abc import Sequence
 from pathlib import Path
 
-from quality_gates import GATES, __version__
+from quality_gates import GATES, __version__, cli_ext
 from quality_gates import gates as gate_runners
 from quality_gates.change_manifest import discover_changes
-from quality_gates.ci_plan import select_change_gates, select_gates, unknown_gates
-from quality_gates.config import QualityConfig, is_pr_event, load_config
-from quality_gates.decision import evaluate
+from quality_gates.ci_plan import (
+    risk_decision,
+    select_change_gates,
+    select_gates,
+    unknown_gates,
+)
+from quality_gates.cli_runtime import (
+    _apply_one,
+    _baseline,
+    _certify,
+    _csv,
+    _emit,
+    _eval,
+    _fix,
+    _onboard,
+    _oracle,
+    _print_detect,
+    _resolve_languages,
+    _watch,
+)
+from quality_gates.config import is_pr_event, load_config
 from quality_gates.detect import detect_languages
+from quality_gates.doctor import doctor
 from quality_gates.evidence import attach_evidence
 from quality_gates.gates.version import apply_bump
-from quality_gates.installers import (
-    ensure_checkstyle,
-    ensure_gitleaks,
-    ensure_golangci_lint,
-    ensure_google_java_format,
-    ensure_node_tooling,
-    ensure_osv_scanner,
-    write_github_path,
-)
-from quality_gates.models import GateResult
 from quality_gates.paths import cache_dir, project_root
 from quality_gates.planner import build_plan, render_plan, write_plan
-from quality_gates.policy import apply_policy, maybe_comment_pr, write_baseline
-from quality_gates.registry import canonical_name
-from quality_gates.report import (
-    build_digest,
-    emit_annotations,
-    render_console,
-    write_reports,
-)
 from quality_gates.report_cli import print_report as _print_report
 from quality_gates.result_cache import cache_status, clean_cache
-from quality_gates.tool_manifest import load_tool_manifest, platform_id
-from quality_gates.tools import tool_version, which
 
 
 def _invoked_as_sheriff(argv: Sequence[str] | None) -> bool:
@@ -52,6 +51,87 @@ def _invoked_as_sheriff(argv: Sequence[str] | None) -> bool:
 
 def _invoked_as_legacy_quality(argv: Sequence[str] | None) -> bool:
     return argv is None and Path(sys.argv[0]).name.lower() == "quality"
+
+
+# Phase 1.3: the top-level surface is the everyday loop. Everything else is
+# still reachable, but grouped so `codesheriff --help` reads like a product
+# instead of a tool dump. The groups are argv rewrites, so every existing
+# parser, test, and muscle-memory invocation keeps working unchanged.
+ADMIN_COMMANDS = frozenset(
+    {
+        "apply",
+        "baseline",
+        "benchmark",
+        "bump",
+        "cache",
+        "eval",
+        "evidence",
+        "fleet",
+        "github-app",
+        "ingest",
+        "init",
+        "merge",
+        "notes",
+        "policy",
+        "redact",
+        "reports",
+        "risk",
+        "rules",
+        "sarif",
+        "sbom",
+        "setup",
+        "targets",
+        "timing",
+        "trace",
+        "watch",
+    }
+)
+DEBUG_COMMANDS = frozenset(
+    {
+        "check-local",
+        "comments",
+        "detect",
+        "doctor",
+        "ignore",
+        "mcp",
+        "packages",
+        "regex",
+        "serve",
+        "ui",
+        "version",
+    }
+)
+DEPRECATED_ALIASES = {
+    "check": "review",
+}
+
+
+def _rewrite_argv(argv: Sequence[str]) -> tuple[list[str], str | None]:
+    """Expand a leading ``admin``/``debug`` group or deprecated alias."""
+    items = list(argv)
+    if not items:
+        return items, None
+    command = items[0]
+    if command in DEPRECATED_ALIASES:
+        print(
+            f"warning: `{command}` is deprecated; use `{DEPRECATED_ALIASES[command]}`.",
+            file=sys.stderr,
+        )
+        items[0] = DEPRECATED_ALIASES[command]
+        return items, None
+    if command in {"admin", "debug"}:
+        items.pop(0)
+        return items, command
+    return items, None
+
+
+def _group_help(group: str) -> int:
+    names = sorted(ADMIN_COMMANDS if group == "admin" else DEBUG_COMMANDS)
+    print(f"codesheriff {group} — grouped commands (equal to running them directly):")
+    for name in names:
+        print(f"  codesheriff {name}")
+    print(f"\nrun `codesheriff {group} <command> [args]` or `codesheriff <command>`")
+    return 0
 
 
 def _add_onboard_args(
@@ -98,7 +178,12 @@ def _add_onboard_args(
     parser.add_argument(
         "--force",
         action="store_true",
-        help="overwrite quality.toml and generated workflows",
+        help="overwrite sheriff.toml and generated workflows",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print what setup would write without touching the repo",
     )
     parser.add_argument(
         "--hooks",
@@ -110,7 +195,7 @@ def _add_onboard_args(
         "--run",
         action=argparse.BooleanOptionalAction,
         default=run,
-        help="run gates once and write .quality-baseline.json",
+        help="run gates once and write .sheriff-baseline.json",
     )
     parser.add_argument(
         "--agents",
@@ -133,9 +218,30 @@ def _add_onboard_args(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    argv, group = _rewrite_argv(sys.argv[1:] if argv is None else argv)
+    if group is not None and not argv:
+        return _group_help(group)
     parser = argparse.ArgumentParser(
         prog="codesheriff",
         description="Multi-language format, lint, DRY, security, compile, impact, coverage, 120-point audit, UI, version, and AI review gates.",
+        epilog=(
+            "common commands:\n"
+            "  setup      install Sheriff into this repo (config, workflow, hooks)\n"
+            "  run        run the change-aware gate suite (the everyday command)\n"
+            "  fix        apply safe automatic remediations\n"
+            "  oracle     remaining blockers + one Next action (agent loop)\n"
+            "  report     reprint the last run's scorecard\n"
+            "  doctor     diagnose missing tools\n"
+            "  certify    merge certificate (auto-merge readiness)\n"
+            "\n"
+            "groups:\n"
+            "  admin      setup, baseline, merge, eval, sbom, fleet, policy, ...\n"
+            "  debug      doctor, detect, serve, ui, rules, traces, ...\n"
+            "\n"
+            "everything else is diagnostics or administration; run\n"
+            "`codesheriff <command> --help` for details."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     if _invoked_as_legacy_quality(argv):
         print(
@@ -153,13 +259,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--policy",
         choices=["observe", "adopt", "enforce"],
         default=None,
-        help="observe = report only; adopt = ratchet vs baseline; enforce = fail_on (default: quality.toml)",
+        help="observe = report only; adopt = ratchet vs baseline; enforce = fail_on (default: sheriff.toml)",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("detect", help="list languages and toolchains in the project")
-    doctor = sub.add_parser("doctor", help="show which tools are available")
-    doctor.add_argument(
+    doctor_parser = sub.add_parser("doctor", help="show which tools are available")
+    doctor_parser.add_argument(
         "--install", action="store_true", help="download pinned CI binaries"
     )
     cache_p = sub.add_parser("cache", help="inspect or clean deterministic results")
@@ -225,6 +331,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     fleet_export.add_argument(
         "--opt-in", action="store_true", help="confirm local metrics export"
     )
+    fleet_report = fleet_cmd.add_parser(
+        "report", help="org-wide rollup across sibling checkouts (local only)"
+    )
+    fleet_report.add_argument(
+        "--scan", type=Path, default=None, help="directory holding sibling checkouts"
+    )
+    fleet_report.add_argument(
+        "--format", choices=["markdown", "json"], default="markdown"
+    )
+    fleet_report.add_argument("--output", type=Path, default=None)
 
     benchmark_p = sub.add_parser(
         "benchmark", help="static-only OSS checkout corpus inventory"
@@ -306,7 +422,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     eval_p.add_argument(
         "--suite",
         dest="eval_suite",
-        choices=["reviewbench", "martian", "macroscope", "all"],
+        choices=["reviewbench", "sheriffbench", "martian", "macroscope", "all"],
         default="reviewbench",
     )
     eval_p.add_argument(
@@ -338,6 +454,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     oracle_p.add_argument("--skip", default=None, help="comma-separated gates")
     oracle_p.add_argument("--full", action="store_true")
     oracle_p.add_argument("--base", default=None)
+    oracle_p.add_argument(
+        "--reset-stall",
+        action="store_true",
+        help="clear the repeated-next-action counter before evaluating",
+    )
 
     sub.add_parser(
         "mcp",
@@ -359,9 +480,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="skip applying finding patches; only format/lint autofix",
     )
 
-    sub.add_parser(
+    certify_p = sub.add_parser(
         "certify",
         help="print the merge certificate (auto-merge ready when green)",
+    )
+    certify_p.add_argument(
+        "--sign",
+        action="store_true",
+        help="attach an HMAC-SHA256 signature (key from --key or SHERIFF_CERT_KEY)",
+    )
+    certify_p.add_argument(
+        "--key", default=None, help="signing key (or SHERIFF_CERT_KEY)"
+    )
+    certify_p.add_argument(
+        "--verify", action="store_true", help="verify the stored certificate signature"
     )
 
     apply_p = sub.add_parser(
@@ -484,6 +616,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="plan within this budget; only advisory checks may be deferred",
     )
     run_p.add_argument("--language", action="append", dest="languages")
+    run_p.add_argument("--risk", choices=["off", "auto"], default="off")
     run_p.add_argument(
         "--full",
         action="store_true",
@@ -491,7 +624,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     init = sub.add_parser(
-        "init", help="write default quality.toml and a pinned The Code Sheriff workflow"
+        "init", help="write default sheriff.toml and a pinned The Code Sheriff workflow"
     )
     _add_onboard_args(init, require_check=False)
     setup = sub.add_parser(
@@ -544,7 +677,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     register.add_argument(
         "--no-init",
         action="store_true",
-        help="do not write quality.toml / workflow after the App is created",
+        help="do not write sheriff.toml / workflow after the App is created",
     )
     serve = gh_cmd.add_parser(
         "serve", help="receive GitHub webhooks and dispatch Actions"
@@ -579,7 +712,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     baseline_p = sub.add_parser(
         "baseline",
-        help="write .quality-baseline.json from the last run (grandfather current findings)",
+        help="write .sheriff-baseline.json from the last run (grandfather current findings)",
     )
     baseline_p.add_argument(
         "--ratchet",
@@ -617,7 +750,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     check_local.add_argument("--base", default=None)
 
-    serve_p = sub.add_parser("serve", help="local HTTP API for findings, runs, metrics")
+    serve_p = sub.add_parser(
+        "serve", help="local triage dashboard + JSON API over .quality-reports"
+    )
     serve_p.add_argument("--host", default="127.0.0.1")
     serve_p.add_argument("--port", type=int, default=8788)
 
@@ -656,12 +791,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     reports_p.add_argument("action", choices=["gc"])
     reports_p.add_argument("--days", type=int, default=None)
 
+    cli_ext.register_parsers(sub)
+
     args = parser.parse_args(argv)
     root = project_root(args.root)
     os.chdir(root)
     config = load_config(root)
     if args.policy:
         config.policy = args.policy
+
+    ext_result = cli_ext.dispatch(args, root, config)
+    if ext_result is not None:
+        return ext_result
 
     if args.command == "github-app":
         from quality_gates.github_app import cli_github_app
@@ -715,8 +856,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps(payload, indent=2))
         return 0
     if args.command == "fleet":
-        from quality_gates.product import fleet_metrics
+        from quality_gates.product import (
+            fleet_metrics,
+            fleet_summary,
+            render_fleet_markdown,
+        )
 
+        if getattr(args, "fleet_command", "export") == "report":
+            base = (args.scan or root.parent).expanduser()
+            summary = fleet_summary(base)
+            if args.format == "json":
+                text = json.dumps(summary, indent=2) + "\n"
+            else:
+                text = render_fleet_markdown(summary)
+            output = args.output
+            if output is None:
+                print(text, end="")
+                return 0
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(text, encoding="utf-8")
+            print(output)
+            return 0
         if not args.opt_in:
             print("fleet export requires explicit --opt-in", file=sys.stderr)
             return 2
@@ -751,7 +911,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "fix":
         return _fix(root, apply_patches=not args.no_patches, as_json=args.json)
     if args.command == "certify":
-        return _certify(root, as_json=args.json)
+        return _certify(
+            root,
+            as_json=args.json,
+            sign=bool(getattr(args, "sign", False)),
+            verify=bool(getattr(args, "verify", False)),
+            key=getattr(args, "key", None),
+        )
     if args.command == "apply":
         return _apply_one(root, args.finding_id, as_json=args.json)
     if args.command == "eval":
@@ -845,7 +1011,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return _emit([result], root, config, args.json, ["review"])
     if args.command == "doctor":
-        return _doctor(root, config, install=args.install, as_json=args.json)
+        return doctor(root, config, install=args.install, as_json=args.json)
     if args.command == "cache":
         if args.provenance and args.action == "status":
             from quality_gates.product import cache_provenance
@@ -1029,13 +1195,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         if not args.only and not args.full:
             print(f"ci.mode={config.ci_mode} · gates: {', '.join(gates)}")
-        manifest = discover_changes(root, args.base) if args.changed else None
+        manifest = (
+            discover_changes(root, args.base)
+            if args.changed or getattr(args, "risk", "off") == "auto"
+            else None
+        )
         if manifest is not None and manifest.state == "unknown":
             print(f"change discovery failed: {manifest.reason}", file=sys.stderr)
             return 2
         if manifest is not None:
             manifest.write(root)
             gates = select_change_gates(gates, manifest.paths)
+            gates, risk_notes = risk_decision(
+                gates,
+                manifest.paths,
+                required=config.fail_on,
+                mode=getattr(args, "risk", "off"),
+            )
+            for note in risk_notes:
+                print(note)
         changed = (
             [
                 (root / path).resolve()
@@ -1189,505 +1367,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     parser.error("unknown command")
     return 2
-
-
-def _fix(root: Path, *, apply_patches: bool, as_json: bool) -> int:
-    from quality_gates.autofix import run_autofix
-    from quality_gates.oracle import remaining_from_reports, render_prompt
-
-    payload = run_autofix(root, apply_patches=apply_patches)
-    remaining = remaining_from_reports(root)
-    remaining["autofix"] = payload
-    if as_json:
-        print(json.dumps(remaining, indent=2))
-    else:
-        for note in payload.get("applied") or []:
-            print(note)
-        print(render_prompt(remaining))
-    return 0 if remaining.get("green") else 1
-
-
-def _certify(root: Path, *, as_json: bool) -> int:
-    from quality_gates.oracle import remaining_from_reports
-
-    payload = remaining_from_reports(root)
-    certificate = payload.get("certificate") or {}
-    if as_json:
-        print(json.dumps(certificate, indent=2))
-    else:
-        from quality_gates.certificate import render_certificate
-
-        print(render_certificate(certificate))
-    return 0 if certificate.get("ready") else 1
-
-
-def _apply_one(root: Path, finding_id: str | None, *, as_json: bool) -> int:
-    from quality_gates.models import Finding
-    from quality_gates.oracle import finding_from_reports
-    from quality_gates.review.apply import apply_and_verify
-
-    packed = finding_from_reports(root, finding_id)
-    row = packed.get("finding")
-    if not isinstance(row, dict):
-        if as_json:
-            print(json.dumps(packed, indent=2))
-        else:
-            print(packed.get("error") or "no finding")
-        return 1
-    finding = Finding(
-        gate=str(row.get("gate") or "review"),
-        message=str(row.get("message") or ""),
-        path=row.get("path"),
-        line=row.get("line") if isinstance(row.get("line"), int) else None,
-        rule=row.get("rule"),
-        patch=row.get("patch"),
-        suggestion=row.get("suggestion"),
-        verify=row.get("verify"),
-    )
-    verified = apply_and_verify(root, finding)
-    verified["id"] = row.get("id")
-    if as_json:
-        print(json.dumps(verified, indent=2))
-    else:
-        print(verified.get("status") or verified)
-        if verified.get("next"):
-            print(verified["next"])
-    return 0 if verified.get("resolved") else 1
-
-
-def _oracle(root: Path, args: argparse.Namespace) -> int:
-    from quality_gates.oracle import remaining_from_reports, render_prompt
-
-    if args.run:
-        argv = ["--root", str(root), "run"]
-        if args.only:
-            argv.extend(["--only", args.only])
-        if args.skip:
-            argv.extend(["--skip", args.skip])
-        if args.full:
-            argv.append("--full")
-        if getattr(args, "base", None):
-            argv.extend(["--base", args.base])
-        main(argv)
-    payload = remaining_from_reports(root)
-    if args.prompt:
-        print(render_prompt(payload))
-    else:
-        print(json.dumps(payload, indent=2))
-    return 0 if payload.get("green") else 1
-
-
-def _eval(root: Path, args: argparse.Namespace) -> int:
-    from quality_gates.review.bench import run_heuristic_suite
-    from quality_gates.review.external_eval import (
-        download_martian,
-        llm_eval_enabled,
-        macroscope_reconstructed,
-    )
-
-    suite = args.eval_suite
-    payload: dict[str, object] = {}
-    if suite in {"reviewbench", "all"}:
-        payload["reviewbench"] = run_heuristic_suite()
-    if suite in {"martian", "all"}:
-        if args.download or suite == "martian":
-            payload["martian"] = download_martian(root, force=args.download)
-        else:
-            payload["martian"] = {
-                "skipped": "pass --download to fetch MIT golden comments",
-                "url": "https://github.com/withmartian/code-review-benchmark",
-            }
-    if suite in {"macroscope", "all"}:
-        payload["macroscope"] = macroscope_reconstructed()
-    if args.llm and not llm_eval_enabled():
-        payload["llm"] = {
-            "skipped": True,
-            "reason": "set QUALITY_REVIEW_EVAL=1 and ANTHROPIC_API_KEY or OPENAI_API_KEY",
-        }
-    print(json.dumps(payload, indent=2))
-    dest = root / ".quality-reports" / "eval" / "SCORECARD.md"
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(_eval_markdown(payload), encoding="utf-8")
-    bench = payload.get("reviewbench")
-    if isinstance(bench, dict) and bench.get("failed"):
-        return 1
-    if args.llm and not llm_eval_enabled():
-        return 2
-    return 0
-
-
-def _eval_markdown(payload: dict[str, object]) -> str:
-    lines = ["# Review eval scorecard", ""]
-    bench = payload.get("reviewbench")
-    if isinstance(bench, dict):
-        lines += [
-            "## ReviewBench (heuristic)",
-            "",
-            f"- cases: {bench.get('cases')}",
-            f"- recall: {bench.get('recall')}",
-            f"- hard-negative pass: {bench.get('hard_negative_pass')}",
-            f"- failed: {', '.join(bench.get('failed') or []) or 'none'}",
-            "",
-        ]
-    martian = payload.get("martian")
-    if isinstance(martian, dict):
-        lines += [
-            "## Martian CRB",
-            "",
-            f"- {martian.get('citation') or martian.get('url') or ''}",
-            f"- PRs: {martian.get('prs', martian.get('skipped', ''))}",
-            "",
-        ]
-    macro = payload.get("macroscope")
-    if isinstance(macro, dict):
-        lines += ["## Macroscope reconstructed sample", "", f"- {macro.get('id')}", ""]
-    lines.append("Source: `quality eval`. Settings are the heuristic suite defaults.")
-    lines.append("")
-    return "\n".join(lines)
-
-
-def _csv(value: str | None) -> list[str]:
-    if not value:
-        return []
-    return [part.strip() for part in value.split(",") if part.strip()]
-
-
-def _resolve_languages(
-    root: Path,
-    config: QualityConfig,
-    explicit: list[str] | None,
-    files: list[Path] | None,
-) -> list[str]:
-    if explicit:
-        return [canonical_name(item) or item for item in explicit]
-    return detect_languages(root, config, files)["languages"]
-
-
-def _print_detect(info: dict[str, list[str]], as_json: bool) -> int:
-    if as_json:
-        print(json.dumps(info))
-    else:
-        langs = ", ".join(info["languages"]) or "(none)"
-        tools = ", ".join(info["toolchains"]) or "(none)"
-        print(f"languages:  {langs}")
-        print(f"toolchains: {tools}")
-    return 0
-
-
-def _emit(
-    results: list[GateResult],
-    root: Path,
-    config: QualityConfig,
-    as_json: bool,
-    fail_on: list[str],
-) -> int:
-    from quality_gates.findings_artifact import (
-        reconcile_last_findings,
-        rotate_and_persist,
-    )
-    from quality_gates.ignore import apply_ignores
-
-    results, policy = apply_policy(results, root, config)
-    leftover = reconcile_last_findings(root, results)
-    if leftover:
-        apply_ignores(results, root)
-    rotate_and_persist(root, results)
-    for result in results:
-        if not result.evidence:
-            attach_evidence(result, root, config)
-    maybe_comment_pr(results, root, config, policy)
-    emit_annotations(results)
-    digest = build_digest(
-        results, policy=policy, report_dir=root / ".quality-reports", root=root
-    )
-    write_reports(digest, root / ".quality-reports", policy=policy)
-    if as_json:
-        print(json.dumps(digest.to_dict(), indent=2))
-    else:
-        print(render_console(digest))
-    # ``fail_on`` is the selected run's required contract for one-command and
-    # CI execution. The evaluator also rejects failed scanners without findings.
-    required = [item.name for item in results if item.name in fail_on]
-    return 0 if evaluate(results, required).approved else 1
-
-
-def _watch(root: Path, config: QualityConfig, *, interval: float) -> int:
-    from quality_gates.watch import watch_loop
-
-    def _rerun() -> None:
-        print("change detected — codesheriff run --skip review", flush=True)
-        main(["--root", str(root), "run", "--skip", "review"])
-
-    print(f"watching {root} every {interval}s (Ctrl-C to stop)", flush=True)
-    try:
-        return watch_loop(root, config, _rerun, interval=interval)
-    except KeyboardInterrupt:
-        return 0
-
-
-def _doctor_validate_install(config: QualityConfig, *, install: bool) -> int | None:
-    """Validate that --install is permitted and perform installation if requested.
-
-    Returns a non-zero exit code if validation fails, otherwise ``None``.
-    """
-    if install and config.offline:
-        print(
-            "doctor --install is unavailable while quality.offline=true",
-            file=sys.stderr,
-        )
-        return 2
-    if install:
-        _install_all()
-        write_github_path()
-    return None
-
-
-def _doctor_select_tools(
-    root: Path, config: QualityConfig, detected: dict[str, object]
-) -> list:
-    manifest = load_tool_manifest()
-    language_set = set(detected["languages"])
-    kind_set = set(detected["file_kinds"])
-    required = set(config.required_tools)
-    return [
-        tool
-        for tool in manifest.tools
-        if language_set.intersection(tool.languages)
-        or kind_set.intersection(tool.file_kinds)
-        or required.intersection({tool.id})
-        or set(tool.capabilities).intersection({"security", "dry"})
-    ]
-
-
-def _doctor_tool_row(
-    tool, root: Path, config: QualityConfig, required: set[str]
-) -> dict[str, object]:
-    path = next(
-        (
-            found
-            for command in tool.commands
-            if (
-                found := which(
-                    command,
-                    project=root,
-                    prefer_project=config.prefer_project_tools,
-                )
-            )
-        ),
-        None,
-    )
-    if path is None and tool.cache_path:
-        cached = cache_dir() / tool.cache_path
-        path = str(cached) if cached.is_file() else None
-    command = tool.commands[0] if tool.commands else tool.id
-    version = (
-        tool_version(command, tool.version_args)
-        if path and tool.commands
-        else tool.version
-        if path
-        else None
-    )
-    return {
-        "tool": tool.id,
-        "path": path,
-        "version": version,
-        "ok": bool(path),
-        "required": tool.id in required,
-        "capabilities": list(tool.capabilities),
-        "platform_supported": tool.supports_current_platform(),
-        "auto_install_supported": tool.install_supported,
-        "auto_install_reason": tool.install_reason,
-    }
-
-
-def _doctor_missing_rows(selected, required: set[str]) -> list[dict[str, object]]:
-    known = {tool.id for tool in selected}
-    return [
-        {
-            "tool": tool_id,
-            "path": None,
-            "version": None,
-            "ok": False,
-            "required": True,
-            "capabilities": [],
-            "platform_supported": False,
-            "auto_install_supported": False,
-            "auto_install_reason": "not present in the tool manifest",
-        }
-        for tool_id in sorted(required - known)
-    ]
-
-
-def _doctor_compute_rows(
-    root: Path, config: QualityConfig, detected: dict[str, object]
-) -> list[dict[str, object]]:
-    required = set(config.required_tools)
-    selected = _doctor_select_tools(root, config, detected)
-    rows = [_doctor_tool_row(tool, root, config, required) for tool in selected]
-    rows.extend(_doctor_missing_rows(selected, required))
-    return rows
-
-
-def _doctor_build_payload(
-    root: Path,
-    config: QualityConfig,
-    detected: dict[str, object],
-    rows: list[dict[str, object]],
-) -> dict[str, object]:
-    missing_required = [
-        str(row["tool"]) for row in rows if row["required"] and not row["ok"]
-    ]
-    missing_optional = [
-        str(row["tool"]) for row in rows if not row["required"] and not row["ok"]
-    ]
-    return {
-        "platform": platform_id(),
-        "cache": str(cache_dir()),
-        "trust": config.trust,
-        "offline": config.offline,
-        "detected": detected,
-        "tools": rows,
-        "missing_required": missing_required,
-        "missing_optional": missing_optional,
-    }
-
-
-def _doctor_render_console(
-    root: Path, config: QualityConfig, payload: dict[str, object]
-) -> None:
-    rows = payload["tools"]
-    print(f"project: {root}")
-    print(
-        f"platform: {payload['platform']} · trust: {config.trust} · "
-        f"offline: {str(config.offline).lower()}"
-    )
-    print(f"cache: {payload['cache']}")
-    width = max(len(row["tool"]) for row in rows)
-    for row in rows:
-        mark = "ok" if row["ok"] else "missing"
-        requirement = "required" if row["required"] else "optional"
-        extra = row["version"] or row["path"] or "not on PATH"
-        print(f"  {row['tool']:<{width}}  {mark:<8}  {requirement:<8}  {extra}")
-    print(
-        "\nTip: codesheriff doctor --install downloads gitleaks, osv-scanner, golangci-lint, and Java jars."
-    )
-
-
-def _doctor(root: Path, config: QualityConfig, *, install: bool, as_json: bool) -> int:
-    validation_error = _doctor_validate_install(config, install=install)
-    if validation_error is not None:
-        return validation_error
-    detected = detect_languages(root, config)
-    rows = _doctor_compute_rows(root, config, detected)
-    payload = _doctor_build_payload(root, config, detected, rows)
-    if as_json:
-        print(json.dumps(payload, indent=2))
-    else:
-        _doctor_render_console(root, config, payload)
-    return 1 if payload["missing_required"] else 0
-
-
-def _install_all() -> None:
-    ensure_node_tooling()
-    for loader in (
-        ensure_gitleaks,
-        ensure_osv_scanner,
-        ensure_golangci_lint,
-        ensure_google_java_format,
-        ensure_checkstyle,
-    ):
-        try:
-            loader()
-        except (OSError, RuntimeError) as exc:
-            print(f"warning: {loader.__name__} failed: {exc}", file=sys.stderr)
-
-
-def _onboard(root: Path, args: argparse.Namespace) -> int:
-    from quality_gates.onboard import init_repo
-
-    code = init_repo(
-        root,
-        policy=args.init_policy,
-        org=args.org,
-        source=args.source,
-        pin=args.pin,
-        vendor_cli=args.vendor_cli,
-        require_check=bool(args.require_check),
-        force=args.force,
-        hooks=bool(getattr(args, "hooks", False)),
-        agents=bool(getattr(args, "agents", False)),
-        auto_merge=bool(getattr(args, "auto_merge", False)),
-        review_provider=getattr(args, "ai", "auto"),
-    )
-    if getattr(args, "run", False):
-        print("Running first gates and writing a baseline...")
-        run_code = main(["--root", str(root), "run", "--skip", "review"])
-        base_code = main(["--root", str(root), "baseline"])
-        if run_code not in {0, 1}:
-            code = run_code
-        elif base_code != 0:
-            code = base_code
-    if args.command == "setup":
-        print("\nThe Code Sheriff is ready.")
-        print("Next:")
-        print("  1. Review the generated files.")
-        print("  2. Commit them to the repository.")
-        print("  3. Open a pull request to see the check run.")
-        print(
-            "Files: quality.toml, .github/workflows/quality.yml, .quality-baseline.json"
-        )
-        if getattr(args, "hooks", False):
-            print("Include .pre-commit-config.yaml if it was just written.")
-        if getattr(args, "agents", False):
-            print(
-                "Include .cursor/mcp.json, .mcp.json, "
-                ".cursor/rules/the-code-sheriff.mdc, and the Code Sheriff skill."
-            )
-            print(
-                "Put `quality` on PATH (`uv tool install git+https://github.com/pwoodman/the-code-sheriff.git`) so MCP can spawn."
-            )
-        if getattr(args, "auto_merge", False):
-            print("GitHub auto-merge: land PRs when `quality certify` is ready.")
-        print(
-            "Need to troubleshoot? Run `codesheriff doctor` or "
-            "`codesheriff report` after the first check."
-        )
-    else:
-        print("Next: codesheriff run --skip review && codesheriff baseline")
-    if args.command == "setup" and getattr(args, "app", False):
-        from quality_gates.github_app import cli_github_app
-
-        register = argparse.Namespace(
-            app_command="register",
-            host="127.0.0.1",
-            port=8787,
-            webhook_url="",
-            org=args.org,
-            name="The Code Sheriff",
-            public=True,
-            no_open=False,
-            no_init=True,
-        )
-        app_code = cli_github_app(register)
-        return app_code or code
-    return code
-
-
-def _baseline(root: Path, config: QualityConfig, *, ratchet: bool) -> int:
-    report = root / ".quality-reports" / "quality-report.json"
-    if not report.is_file():
-        print(
-            "no .quality-reports/quality-report.json — running coverage + audit first"
-        )
-        results = [
-            gate_runners.run_coverage(root, config),
-            gate_runners.run_audit(root, config),
-        ]
-        write_reports(results, root / ".quality-reports")
-    path = write_baseline(root, config, ratchet=ratchet)
-    print(f"wrote {path.relative_to(root)}" + (" (ratchet)" if ratchet else ""))
-    print("Commit this file so PRs fail only on new issues, not the existing backlog.")
-    return 0
 
 
 if __name__ == "__main__":

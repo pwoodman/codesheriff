@@ -214,3 +214,108 @@ def select_monorepo_targets(root: Path, changed_paths: list[str]) -> dict[str, A
         ],
         "execution": "selection-only",
     }
+
+
+def _repo_summary(name: str, root: Path) -> dict[str, Any]:
+    """One repository's fleet row, read from its own report artifacts."""
+    reports = root / ".quality-reports"
+    report = reports / "quality-report.json"
+    payload: dict[str, Any] = {}
+    if report.is_file():
+        try:
+            payload = _json(report)
+        except (OSError, json.JSONDecodeError):
+            payload = {}
+    results = payload.get("results", []) if isinstance(payload, dict) else []
+    errors = warnings = 0
+    gates: dict[str, int] = {}
+    for result in results:
+        for finding in result.get("findings", []) or []:
+            severity = finding.get("severity") or "error"
+            gates[str(result.get("name") or "?")] = (
+                gates.get(str(result.get("name") or "?"), 0) + 1
+            )
+            if severity == "error":
+                errors += 1
+            else:
+                warnings += 1
+    history = reports / "history.json"
+    runs: list[dict[str, Any]] = []
+    if history.is_file():
+        try:
+            loaded = _json(history)
+            runs = loaded if isinstance(loaded, list) else []
+        except (OSError, json.JSONDecodeError):
+            runs = []
+    last = runs[-1] if runs else {}
+    return {
+        "repo": name,
+        "path": str(root),
+        "verdict": last.get("verdict") or ("fail" if errors else "pass"),
+        "errors": errors,
+        "warnings": warnings,
+        "runs": len(runs),
+        "top_gates": sorted(gates.items(), key=lambda kv: -kv[1])[:5],
+        "coverage": last.get("coverage"),
+    }
+
+
+def _find_repo_roots(base: Path) -> list[Path]:
+    """Immediate children that look like Sheriff-instrumented checkouts."""
+    roots: list[Path] = []
+    if (base / ".quality-reports").is_dir():
+        roots.append(base)
+    for child in sorted(base.iterdir()) if base.is_dir() else []:
+        if child.is_dir() and (child / ".quality-reports").is_dir():
+            roots.append(child)
+    return roots
+
+
+def fleet_summary(base: Path) -> dict[str, Any]:
+    """Org-wide rollup across sibling checkouts under ``base``.
+
+    Unlike ``fleet_metrics`` (opt-in, anonymized, no paths) this is an internal
+    operator view: it names repos and paths, so it stays local.
+    """
+    roots = _find_repo_roots(base)
+    repos = [_repo_summary(root.name, root) for root in roots]
+    failing = [row for row in repos if row["verdict"] == "fail"]
+    return {
+        "schema_version": "1.0.0",
+        "repos": repos,
+        "totals": {
+            "repos": len(repos),
+            "failing": len(failing),
+            "errors": sum(row["errors"] for row in repos),
+            "warnings": sum(row["warnings"] for row in repos),
+            "runs": sum(row["runs"] for row in repos),
+        },
+    }
+
+
+def render_fleet_markdown(summary: dict[str, Any]) -> str:
+    rows = summary.get("repos", [])
+    totals = summary.get("totals", {})
+    lines = [
+        "# Sheriff fleet report",
+        "",
+        f"{totals.get('repos', 0)} repositor(ies) · "
+        f"{totals.get('failing', 0)} failing · "
+        f"{totals.get('errors', 0)} errors · "
+        f"{totals.get('warnings', 0)} warnings",
+        "",
+        "| Repo | Verdict | Errors | Warnings | Runs | Top gates |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for row in rows:
+        gates = ", ".join(
+            f"{name} x{count}" for name, count in row.get("top_gates", [])
+        )
+        lines.append(
+            f"| {row['repo']} | {row['verdict']} | {row['errors']} | "
+            f"{row['warnings']} | {row['runs']} | {gates or '—'} |"
+        )
+    if not rows:
+        lines.append("| _no instrumented repos found_ | | | | | |")
+    lines.append("")
+    return "\n".join(lines)

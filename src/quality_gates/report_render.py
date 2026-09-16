@@ -72,6 +72,14 @@ def render_sarif(digest: QualityDigest) -> dict[str, Any]:
             if region:
                 location["physicalLocation"]["region"] = region
             entry["locations"] = [location]
+        if finding.reason and finding.severity == "info":
+            entry["suppressions"] = [
+                {
+                    "kind": "external",
+                    "status": "accepted",
+                    "justification": finding.reason,
+                }
+            ]
         sarif_results.append(entry)
     return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
@@ -151,6 +159,15 @@ def render_markdown(digest: QualityDigest) -> str:
         f"**Verdict:** {digest.verdict.upper()} · **policy:** `{digest.policy}` · "
         f"**errors:** {digest.errors} · **warnings:** {digest.warnings}",
         "",
+        *(
+            [
+                f"**Suppressed:** {digest.suppressions['total']} accepted finding(s) — "
+                "run `codesheriff suppress audit` to review waivers.",
+                "",
+            ]
+            if digest.suppressions["total"]
+            else []
+        ),
         "## Scorecard",
         "",
         "| Gate | Status | Errors | Warnings | Time |",
@@ -224,6 +241,14 @@ def render_console(digest: QualityDigest) -> str:
         f"Quality report · policy={digest.policy} · {digest.verdict.upper()}"
         f" ({digest.errors} error(s), {digest.warnings} warning(s))",
         f"  {passed} passed · {failed} failed · {skipped} skipped (skip ≠ fail)",
+    ]
+    suppressed = digest.suppressions
+    if suppressed["total"]:
+        gates = ", ".join(
+            f"{gate} {count}" for gate, count in sorted(suppressed["by_gate"].items())
+        )
+        rows.append(f"  {suppressed['total']} accepted finding(s) suppressed: {gates}")
+    rows += [
         "",
         "Scorecard",
     ]

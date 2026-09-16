@@ -318,7 +318,7 @@ def _neighbors(root: Path, config: QualityConfig, paths: list[str]) -> list[str]
         if not is_source(src):
             continue
         for other in sorted(
-            graph.imports.get(src, ()) | graph.imported_by.get(src, ())
+            set(graph.imports.get(src) or ()) | set(graph.imported_by.get(src) or ())
         ):
             if other in seen:
                 continue

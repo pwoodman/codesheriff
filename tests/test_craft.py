@@ -139,7 +139,7 @@ def test_playbook_puts_format_first_and_certificate_blocks() -> None:
     assert payload["certificate"]["auto_merge"] == "blocked"
     prompt = render_prompt(payload)
     assert "Next action:" in prompt
-    assert "quality fix" in prompt or "format" in prompt
+    assert "codesheriff fix" in prompt or "format" in prompt
     assert "codesheriff oracle --run" in prompt
 
 

@@ -50,7 +50,7 @@ RULE_HELP: dict[tuple[str, str], tuple[str, str, str]] = {
         "consistent",
     ): (
         "Multiple version files declare different numbers.",
-        "Set every version file to the same semver, or run `quality bump auto`.",
+        "Set every version file to the same semver, or run `codesheriff bump auto`.",
         "",
     ),
     (
@@ -66,7 +66,7 @@ RULE_HELP: dict[tuple[str, str], tuple[str, str, str]] = {
         "must-increase",
     ): (
         "Source changed but the declared package version is not higher than the base branch.",
-        "Run `quality bump auto` (or major/minor/patch) and mention the new version in CHANGELOG.md.",
+        "Run `codesheriff bump auto` (or major/minor/patch) and mention the new version in CHANGELOG.md.",
         "",
     ),
     (
@@ -74,7 +74,7 @@ RULE_HELP: dict[tuple[str, str], tuple[str, str, str]] = {
         "bump-required",
     ): (
         "Source files changed without a matching version-file edit.",
-        "Run `quality bump auto` so consumers can tell this release apart from the previous one.",
+        "Run `codesheriff bump auto` so consumers can tell this release apart from the previous one.",
         "",
     ),
     (

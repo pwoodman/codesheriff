@@ -282,7 +282,7 @@ def _require_source_tests(root: Path, config: QualityConfig) -> list[Finding]:
                     "source changed without an accompanying test file — add coverage "
                     "for the new behavior, or ignore with "
                     "`# quality:ignore-file missing-tests` / "
-                    "`quality ignore add --rule missing-tests`"
+                    "`codesheriff ignore add --rule missing-tests`"
                 ),
             )
         ]
@@ -321,21 +321,21 @@ def _selected_tests(
 def _onboarding_suggestion(root: Path, source: list[Path]) -> str:
     suffixes = {path.suffix.lower() for path in source}
     if {".py"} & suffixes:
-        return "add pytest and tests/test_smoke.py, then run `quality test`"
+        return "add pytest and tests/test_smoke.py, then run `codesheriff test`"
     if {".js", ".ts", ".tsx"} & suffixes:
-        return "add Vitest or Jest and one smoke spec, then run `quality test`"
+        return "add Vitest or Jest and one smoke spec, then run `codesheriff test`"
     if ".go" in suffixes:
-        return "add a *_test.go smoke test, then run `quality test`"
+        return "add a *_test.go smoke test, then run `codesheriff test`"
     if {".java"} & suffixes:
-        return "add Maven/Gradle tests, then run `quality test`"
+        return "add Maven/Gradle tests, then run `codesheriff test`"
     if {".cs"} & suffixes:
-        return "add `dotnet test` coverage, then run `quality test`"
+        return "add `dotnet test` coverage, then run `codesheriff test`"
     if {".php"} & suffixes:
-        return "add PHPUnit, then run `quality test`"
+        return "add PHPUnit, then run `codesheriff test`"
     if {".rb"} & suffixes:
-        return "add RSpec, then run `quality test`"
+        return "add RSpec, then run `codesheriff test`"
     if {".kt"} & suffixes:
-        return "add Gradle tests, then run `quality test`"
+        return "add Gradle tests, then run `codesheriff test`"
     if {".ex", ".exs"} & suffixes:
-        return "add mix test, then run `quality test`"
+        return "add mix test, then run `codesheriff test`"
     return "configure a supported test runner and add a smoke test"

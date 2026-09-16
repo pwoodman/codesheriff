@@ -19,7 +19,8 @@ from quality_gates.github_comment import post_pr_comment
 from quality_gates.models import Finding, GateResult
 from quality_gates.report import build_digest, performance_bullets
 
-DEFAULT_BASELINE = ".quality-baseline.json"
+DEFAULT_BASELINE = ".sheriff-baseline.json"
+LEGACY_BASELINE = ".quality-baseline.json"
 COVERAGE_SLACK = 1.0
 
 
@@ -34,7 +35,14 @@ def effective_policy(config: QualityConfig) -> str:
 def baseline_path(root: Path, config: QualityConfig) -> Path:
     rel = config.policy_baseline or DEFAULT_BASELINE
     path = Path(rel)
-    return path if path.is_absolute() else root / path
+    resolved = path if path.is_absolute() else root / path
+    if resolved.is_file():
+        return resolved
+    if not rel or rel == DEFAULT_BASELINE:
+        legacy = root / LEGACY_BASELINE
+        if legacy.is_file():
+            return legacy
+    return resolved
 
 
 def fingerprint(finding: Finding) -> str:
@@ -98,17 +106,23 @@ def _load_base_baseline(
         if verify.returncode != 0:
             return False, None
         rel = baseline_path(root, config).relative_to(root).as_posix()
-        res = subprocess.run(
-            ["git", "show", f"{base}:{rel}"],
-            cwd=root,
-            text=True,
-            capture_output=True,
-            check=False,
-            timeout=5,
-        )
-        if res.returncode == 0:
-            data = json.loads(res.stdout)
-            return True, data if isinstance(data, dict) else None
+        candidates = [rel]
+        if rel not in {DEFAULT_BASELINE, LEGACY_BASELINE}:
+            candidates.append(DEFAULT_BASELINE)
+        if LEGACY_BASELINE not in candidates:
+            candidates.append(LEGACY_BASELINE)
+        for candidate in candidates:
+            res = subprocess.run(
+                ["git", "show", f"{base}:{candidate}"],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=5,
+            )
+            if res.returncode == 0:
+                data = json.loads(res.stdout)
+                return True, data if isinstance(data, dict) else None
         return True, None
     except (OSError, json.JSONDecodeError, ValueError, subprocess.TimeoutExpired):
         return False, None
@@ -209,7 +223,7 @@ def write_baseline(
         "fingerprints": sorted(fps),
         "note": (
             "Grandfathered findings. adopt fails only on new fingerprints or a "
-            "coverage drop. Run `quality baseline --ratchet` after you fix issues "
+            "coverage drop. Run `codesheriff baseline --ratchet` after you fix issues "
             "to raise the floor; never shrink this file to hide new defects."
         ),
     }
@@ -247,7 +261,7 @@ def apply_policy(
     if policy == "observe" or (policy == "adopt" and state == "initial"):
         reason = (
             f"policy={policy}: findings are visible but the job does not fail. "
-            "Commit `quality baseline` to ratchet (adopt) or set policy=enforce."
+            "Commit `codesheriff baseline` to ratchet (adopt) or set policy=enforce."
             if policy == "adopt"
             else "policy=observe: report-only; PRs are not blocked."
         )
@@ -283,7 +297,7 @@ def apply_policy(
         if kept == 0:
             result.status = "pass"
             result.notes.append(
-                "policy=adopt: existing findings grandfathered vs .quality-baseline.json"
+                "policy=adopt: existing findings grandfathered vs the baseline file"
             )
         else:
             result.notes.append(f"policy=adopt: {kept} new finding(s) vs baseline")
@@ -399,12 +413,12 @@ def render_digest(
     if policy == "adopt":
         lines.append(
             "Grandfathered findings stay warnings until you fix them and run "
-            "`quality baseline --ratchet`. New fingerprints or a coverage drop fail the job."
+            "`codesheriff baseline --ratchet`. New fingerprints or a coverage drop fail the job."
         )
     elif policy == "observe":
         lines.append(
             "Observe mode never fails the check. Switch to `adopt` + a committed "
-            "`.quality-baseline.json` when you are ready to ratchet."
+            "the baseline file when you are ready to ratchet."
         )
     lines.append("")
     lines.append(

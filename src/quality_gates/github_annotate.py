@@ -94,13 +94,33 @@ def summary_from_results(results: list[GateResult]) -> str:
     )
     lines.extend(["", "| Gate | Where | What |", "| --- | --- | --- |"])
     rows = errors or [_fallback_finding(result) for result in failed]
-    for finding in rows[:20]:
+    shown = rows[:20]
+    for finding in shown:
         where = finding.path or finding.gate
         if finding.line and finding.path:
             where = f"{finding.path}:{finding.line}"
         what = (finding.message or "").replace("|", "\\|").replace("\n", " ")
         lines.append(f"| {finding.gate} | `{where}` | {what[:200]} |")
+    hidden = len(rows) - len(shown)
+    if hidden > 0:
+        target = _overflow_hint(results)
+        lines.append("")
+        lines.append(
+            f"_{len(shown)} of {len(rows)} findings shown; {hidden} more._ "
+            f"Run `codesheriff report` or open the run's SARIF/HTML artifact"
+            f"{f' ({target})' if target else ''} for the full list."
+        )
     return "\n".join(lines) + "\n"
+
+
+def _overflow_hint(results: list[GateResult]) -> str:
+    """Name the reusable workflow run with the full artifacts, when available."""
+    run_id = os.environ.get("GITHUB_RUN_ID")
+    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    if run_id and repo:
+        return f"{server}/{repo}/actions/runs/{run_id}"
+    return ""
 
 
 def run_ruff_github(paths: list[str]) -> int:

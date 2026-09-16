@@ -14,7 +14,43 @@ from quality_gates.report_model import (
 )
 
 
+def _blob_base() -> str:
+    """Best-effort permalink prefix for the current checkout, or ``""``.
+
+    Only emitted when the run is clearly CI-hosted with a repo slug and commit,
+    so local reports stay offline-friendly instead of linking to nothing.
+    """
+    import os
+
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    sha = (
+        os.environ.get("QUALITY_HEAD_SHA")
+        or os.environ.get("GITHUB_SHA")
+        or os.environ.get("QUALITY_PR_HEAD_SHA")
+    )
+    if not repo or not sha:
+        return ""
+    from quality_gates.host import html_base
+
+    return f"{html_base()}/{repo}/blob/{sha}"
+
+
+def _link_path(loc: str, blob_base: str) -> str:
+    """Render a finding pointer, linked when a permalink base is available."""
+    label = html.escape(loc)
+    if not blob_base or ":" not in loc:
+        return f"<code>{label}</code>"
+    path, _, line = loc.rpartition(":")
+    if not path or not line.isdigit():
+        return f"<code>{label}</code>"
+    url = f"{blob_base}/{path.lstrip('/')}#L{line}"
+    return (
+        f"<a class='loc' href='{html.escape(url, quote=True)}'><code>{label}</code></a>"
+    )
+
+
 def render_html(digest: QualityDigest) -> str:
+    blob_base = _blob_base()
     verdict = digest.verdict.upper()
     passed = sum(1 for item in digest.results if item.status == "pass")
     skipped = sum(1 for item in digest.results if item.status == "skip")
@@ -37,7 +73,7 @@ def render_html(digest: QualityDigest) -> str:
         f"{_html_scorecard(digest)}"
         f"{_html_performance(digest)}"
         f"{_html_history(digest)}"
-        f"{_html_issues(digest)}"
+        f"{_html_issues(digest, blob_base)}"
         f"{_html_recommendations(digest)}"
         f"{_html_gates(digest)}"
         f"</main>{_HTML_SCRIPT}</body></html>\n"
@@ -196,7 +232,7 @@ def _html_history(digest: QualityDigest) -> str:
     )
 
 
-def _html_issues(digest: QualityDigest) -> str:
+def _html_issues(digest: QualityDigest, blob_base: str = "") -> str:
     grouped = _issues_by_gate(digest)
     if not grouped:
         return (
@@ -218,7 +254,7 @@ def _html_issues(digest: QualityDigest) -> str:
             + "' data-path='"
             + html.escape(item.path or "")
             + "'>"
-            + _html_finding(item)
+            + _html_finding(item, blob_base)
             + "</li>"
             for item in findings[:40]
         )
@@ -330,6 +366,8 @@ body {
 h1 { font-size: 2.1rem; margin: 0 0 .35rem; letter-spacing: -.03em; }
 .meta { margin: 0; color: var(--muted); }
 .hint { color: var(--muted); }
+a.loc { text-decoration: none; }
+a.loc:hover code { text-decoration: underline; }
 main { max-width: 920px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
   padding: 1.1rem 1.2rem 1.2rem; margin: 1rem 0; box-shadow: 0 1px 0 rgba(0,0,0,.03); }
@@ -421,11 +459,11 @@ _HTML_SCRIPT = """
 """
 
 
-def _html_finding(finding: Finding) -> str:
+def _html_finding(finding: Finding, blob_base: str = "") -> str:
     loc = pointer(finding)
     parts = [
         f"<strong>{html.escape(finding.severity)}</strong> ",
-        f"<code>{html.escape(loc)}</code> ",
+        _link_path(loc, blob_base) + " ",
         html.escape(finding.message),
     ]
     if finding.rule:

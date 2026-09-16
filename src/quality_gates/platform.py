@@ -90,7 +90,7 @@ def export_evidence(
     reports = root / ".quality-reports"
     reports.mkdir(parents=True, exist_ok=True)
     findings = _read_json(reports / "review.json")
-    baseline = _read_json(root / ".quality-baseline.json")
+    baseline = _read_json(root / ".sheriff-baseline.json")
     audit_lines = []
     audit_path = reports / "audit.jsonl"
     if audit_path.is_file():
@@ -131,15 +131,22 @@ def notify_chat(url: str, text: str) -> int:
     return emit_outcome(url, "review.completed", {"text": text})
 
 
+def _rule_names(root: Path) -> list[str]:
+    names: set[str] = set()
+    for rel in (".sheriff/rules", ".quality/rules"):
+        directory = root / rel
+        if directory.is_dir():
+            names.update(p.name for p in directory.glob("*.md"))
+    return sorted(names)
+
+
 def api_state(root: Path) -> dict[str, Any]:
     reports = root / ".quality-reports"
     return {
         "findings": _read_json(reports / "review.json"),
         "runs": _read_json(reports / "history.json"),
         "metrics": _read_json(reports / "cost.json"),
-        "rules": sorted(p.name for p in (root / ".quality" / "rules").glob("*.md"))
-        if (root / ".quality" / "rules").is_dir()
-        else [],
+        "rules": _rule_names(root),
         "config": load_config(root).ai_review,
         "events": [
             line for line in _read_text(reports / "audit.jsonl").splitlines() if line
@@ -149,11 +156,17 @@ def api_state(root: Path) -> dict[str, Any]:
 
 
 def serve_api(root: Path, *, host: str = "127.0.0.1", port: int = 8788) -> int:
+    from quality_gates.dashboard import render_dashboard, suppression_audit, triage
+
     state = lambda: api_state(root)  # noqa: E731
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
+            if parsed.path in {"/", "/dashboard", "/triage"}:
+                page = render_dashboard(root, state(), suppression_audit(root))
+                self._html(page)
+                return
             data = state()
             routes = {
                 "/health": {"ok": True, "app": "the-codesheriff"},
@@ -171,19 +184,45 @@ def serve_api(root: Path, *, host: str = "127.0.0.1", port: int = 8788) -> int:
                 return
             self._json(200, payload)
 
+        def do_POST(self) -> None:
+            parsed = urlparse(self.path)
+            if parsed.path != "/triage":
+                self._json(404, {"error": "not found"})
+                return
+            length = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(length) if length else b"{}"
+            try:
+                payload = json.loads(raw.decode("utf-8") or "{}")
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                self._json(400, {"error": "invalid JSON"})
+                return
+            if not isinstance(payload, dict):
+                self._json(400, {"error": "expected an object"})
+                return
+            self._json(200, triage(root, payload))
+
         def log_message(self, fmt: str, *args: object) -> None:
             return
 
-        def _json(self, status: int, payload: Any) -> None:
-            raw = json.dumps(payload).encode("utf-8")
+        def _send(self, status: int, body: bytes, content_type: str) -> None:
             self.send_response(status)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(raw)))
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(raw)
+            self.wfile.write(body)
+
+        def _json(self, status: int, payload: Any) -> None:
+            self._send(status, json.dumps(payload).encode("utf-8"), "application/json")
+
+        def _html(self, page: str) -> None:
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
 
     httpd = ThreadingHTTPServer((host, port), Handler)
-    print(f"The Code Sheriff API on http://{host}:{port}", flush=True)
+    print(
+        f"The Code Sheriff dashboard on http://{host}:{port} "
+        f"(JSON API on /health, /findings, /runs, /metrics)",
+        flush=True,
+    )
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

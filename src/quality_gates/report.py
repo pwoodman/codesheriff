@@ -145,18 +145,46 @@ def _append_history(directory: Path, digest: QualityDigest) -> None:
         entries = existing if isinstance(existing, list) else []
     except (OSError, json.JSONDecodeError):
         entries = []
-    entries.append(
-        {
-            "ts": datetime.now(UTC).isoformat(),
-            "verdict": digest.verdict,
-            "errors": digest.errors,
-            "warnings": digest.warnings,
-            "coverage": digest.performance.coverage_line,
-            "gate_ms": digest.performance.gate_ms,
-            "failed": digest.failed,
-        }
-    )
+    entry: dict[str, Any] = {
+        "run_id": _run_id(directory),
+        "ts": datetime.now(UTC).isoformat(),
+        "policy": digest.policy,
+        "verdict": digest.verdict,
+        "errors": digest.errors,
+        "warnings": digest.warnings,
+        "coverage": digest.performance.coverage_line,
+        "gate_ms": digest.performance.gate_ms,
+        "failed": digest.failed,
+        "gates": [result.name for result in digest.results],
+    }
+    certificate = _read_certificate(directory)
+    if certificate is not None:
+        entry["certificate"] = certificate
+    entries.append(entry)
     path.write_text(json.dumps(entries[-20:], indent=2) + "\n", encoding="utf-8")
+
+
+def _run_id(directory: Path) -> str:
+    counter = directory / "run-counter"
+    try:
+        current = int(counter.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        current = 0
+    current += 1
+    try:
+        counter.parent.mkdir(parents=True, exist_ok=True)
+        counter.write_text(str(current), encoding="utf-8")
+    except OSError:
+        pass
+    return f"run-{current:04d}"
+
+
+def _read_certificate(directory: Path) -> dict[str, Any] | None:
+    try:
+        data = json.loads((directory / "certificate.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def finding_key(finding: Finding) -> tuple[str, str, str, str]:
@@ -378,42 +406,42 @@ def _recommendations(
                 "P0",
                 "Reformat the tree",
                 "Format findings fail the job until the files match the project style.",
-                "quality fix",
+                "codesheriff fix",
             )
         elif result.name == "lint":
             add(
                 "P0",
                 "Fix lint errors",
                 "Lint findings are blocking. Auto-fix what you can, then resolve the rest.",
-                "quality lint",
+                "codesheriff lint",
             )
         elif result.name == "dry":
             add(
                 "P0",
                 "Remove copy-pasted code",
                 "Extract a shared helper for the duplicated blocks jscpd reported.",
-                "quality dry",
+                "codesheriff dry",
             )
         elif result.name == "security":
             add(
                 "P0",
                 "Clear security findings before compile",
                 "Secrets, CVEs, or SAST hits block compile until they are gone.",
-                "quality security",
+                "codesheriff security",
             )
         elif result.name == "compile":
             add(
                 "P0",
                 "Unblock compile",
                 result.notes[0] if result.notes else "The compile gate failed.",
-                "quality compile",
+                "codesheriff compile",
             )
         elif result.name == "impact":
             add(
                 "P0",
                 "Cover downstream callers",
                 "Update or test every consumer of the changed files.",
-                "quality impact",
+                "codesheriff impact",
             )
         elif result.name == "coverage":
             add(
@@ -422,28 +450,28 @@ def _recommendations(
                 result.findings[0].message
                 if result.findings
                 else "Coverage is below the configured floor.",
-                "quality coverage",
+                "codesheriff coverage",
             )
         elif result.name == "audit":
             add(
                 "P0",
                 "Fix HIGH-confidence audit defects",
                 "P0 audit evidence fails the job. See audit.md for scenario and fix text.",
-                "quality audit",
+                "codesheriff audit",
             )
         elif result.name == "ui":
             add(
                 "P0",
                 "Fix failing UI specs",
                 "Selected Playwright/Cypress specs failed on this diff.",
-                "quality ui",
+                "codesheriff ui",
             )
         elif result.name == "version":
             add(
                 "P0",
                 "Bump the version",
                 "Source changed without a matching semver/changelog bump.",
-                "quality bump auto",
+                "codesheriff bump auto",
             )
         else:
             add(
@@ -461,7 +489,7 @@ def _recommendations(
         if result.name == "security":
             continue
         command = (
-            "quality doctor"
+            "codesheriff doctor"
             if result.skipped_tools
             else f"quality {result.name}"
             if result.name in {"format", "lint", "coverage", "test"}
@@ -474,7 +502,7 @@ def _recommendations(
             + (
                 " Next: install "
                 + ", ".join(result.skipped_tools)
-                + " or run quality doctor."
+                + " or run codesheriff doctor."
                 if result.skipped_tools
                 else " Skip means not applicable, not a pass."
             ),
@@ -487,7 +515,7 @@ def _recommendations(
             "P1",
             "Install security scanners",
             "No security scanner ran. Use doctor to see verified installation options.",
-            "quality doctor",
+            "codesheriff doctor",
         )
     elif security and security.skipped_tools:
         add(
@@ -496,7 +524,7 @@ def _recommendations(
             "Skipped: "
             + ", ".join(security.skipped_tools)
             + ". Doctor reports whether verified auto-install is available.",
-            "quality doctor",
+            "codesheriff doctor",
         )
 
     if (
@@ -510,7 +538,7 @@ def _recommendations(
             "Move coverage toward the 80% industry floor",
             f"This repo is at {perf.coverage_line:.1f}% line coverage "
             f"(industry baseline {INDUSTRY_COVERAGE:.0f}%). Add tests for the hottest gaps.",
-            "quality coverage",
+            "codesheriff coverage",
         )
 
     coverage = by_name.get("coverage")
@@ -519,7 +547,7 @@ def _recommendations(
             "P2",
             "Start measuring coverage",
             coverage.notes[0] if coverage.notes else "No coverage report was produced.",
-            "quality coverage",
+            "codesheriff coverage",
         )
 
     if policy == "observe":
@@ -527,7 +555,7 @@ def _recommendations(
             "P2",
             "Switch from observe to adopt when ready",
             "Observe never blocks. Commit a baseline so new issues fail.",
-            'quality baseline && set policy = "adopt"',
+            'codesheriff baseline && set policy = "adopt"',
         )
 
     if not recs and not any(item.status == "fail" for item in results):
@@ -535,6 +563,6 @@ def _recommendations(
             "P2",
             "Keep the suite green",
             "No blocking issues in this run. Leave pre-commit/pre-push hooks on.",
-            "quality run --skip review",
+            "codesheriff run --skip review",
         )
     return recs

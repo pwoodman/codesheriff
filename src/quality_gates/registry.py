@@ -578,7 +578,7 @@ ALL_FILE_KINDS = tuple(profile.id for profile in FILE_PROFILES)
 def file_profiles_for(languages: list[str]) -> tuple[CapabilityProfile, ...]:
     """File-kind profiles that belong with this language selection.
 
-    ``quality format --language javascript`` must not evaluate GitHub Actions
+    ``codesheriff format --language javascript`` must not evaluate GitHub Actions
     YAML (or other unrelated file kinds). A full run still attaches every file
     profile. Passing a file kind (``--language yaml``) keeps that profile.
     """

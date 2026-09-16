@@ -298,7 +298,7 @@ def scan_diff(
                         message=f"{package}: {risk['message']}",
                         suggestion=(
                             "remove the dependency, or "
-                            f"`quality ignore add --rule package-risk --path {current}`"
+                            f"`codesheriff ignore add --rule package-risk --path {current}`"
                         ),
                     )
                 )
@@ -320,7 +320,7 @@ def scan_diff(
                         ),
                         suggestion=(
                             f"add {package} to the {eco} manifest, or "
-                            f"`quality ignore add --rule undeclared-import --path {current}`"
+                            f"`codesheriff ignore add --rule undeclared-import --path {current}`"
                         ),
                     )
                 )

@@ -71,7 +71,7 @@ ITEMS: tuple[CoverageItem, ...] = (
     CoverageItem(40, "Reviewer Commands", "parse_sheriff_command"),
     CoverageItem(41, "Manual Review Request", "/sheriff review"),
     CoverageItem(42, "Explain a Diff", "/sheriff explain"),
-    CoverageItem(43, "Team Coding Standards", "quality rules preview"),
+    CoverageItem(43, "Team Coding Standards", "codesheriff rules preview"),
     CoverageItem(44, "Path-Specific Rules", "ReviewRule.paths"),
     CoverageItem(45, "Suppression with Rationale", "quality:ignore + ignore.toml"),
     CoverageItem(
@@ -91,7 +91,7 @@ ITEMS: tuple[CoverageItem, ...] = (
     ),
     CoverageItem(55, "Review Latency Dashboard", "latency_breakdown"),
     CoverageItem(56, "GitHub Actions Integration", "quality.yml + sheriff.yml"),
-    CoverageItem(57, "CLI for Local Review", "quality review / check"),
+    CoverageItem(57, "CLI for Local Review", "codesheriff review / check"),
     CoverageItem(58, "VS Code Extension", "editor/vscode"),
     CoverageItem(59, "JetBrains Support", "editor/jetbrains"),
     CoverageItem(60, "OpenAI-Compatible Endpoint Support", "OPENAI_BASE_URL"),
@@ -130,12 +130,12 @@ ITEMS: tuple[CoverageItem, ...] = (
     CoverageItem(93, "Learning from Dispositions", "apply_feedback non-security"),
     CoverageItem(94, "Reviewer Workload Routing", "suggest_reviewers"),
     CoverageItem(95, "Slack/Teams Notifications", "notify_chat"),
-    CoverageItem(96, "Public API", "quality serve"),
+    CoverageItem(96, "Public API", "codesheriff serve"),
     CoverageItem(97, "Webhooks for Outcomes", "emit_outcome"),
     CoverageItem(98, "Terraform Provider", "terraform_schema + terraform/codesheriff"),
     CoverageItem(99, "Open-Source Core/SDK", "MIT + quality.schema.json + packs"),
     CoverageItem(
-        100, "Transparent Evaluation Suite", "quality eval + standards/EVAL.md"
+        100, "Transparent Evaluation Suite", "codesheriff eval + standards/EVAL.md"
     ),
 )
 

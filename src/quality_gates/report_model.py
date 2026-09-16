@@ -98,6 +98,12 @@ class QualityDigest:
     def verdict(self) -> str:
         return "fail" if self.failed else "pass"
 
+    @property
+    def suppressions(self) -> dict[str, Any]:
+        from quality_gates.ignore import suppression_summary
+
+        return suppression_summary(self.results)
+
     def issues(self) -> list[Finding]:
         items = [finding for result in self.results for finding in result.findings]
         rank = {"error": 0, "warning": 1, "info": 2}
@@ -111,6 +117,7 @@ class QualityDigest:
             "failed": self.failed,
             "errors": self.errors,
             "warnings": self.warnings,
+            "suppressions": self.suppressions,
             "performance": self.performance.to_dict(),
             "recommendations": [item.to_dict() for item in self.recommendations],
             "results": [item.to_dict() for item in self.results],

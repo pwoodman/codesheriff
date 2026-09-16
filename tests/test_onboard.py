@@ -37,9 +37,9 @@ def test_consumer_defaults_are_adopt_and_local() -> None:
     assert 'github_gates = ["format", "lint", "regex", "packages", "security"' in text
     assert "require_for_source = true" in text
     assert "timing_regression_pct = 15" in text
-    assert "[quality.merge]" in text
+    assert "[sheriff.merge]" in text
     assert '"merge"' in text or "merge" in text
-    assert "[quality.comments]" in text
+    assert "[sheriff.comments]" in text
 
 
 def test_init_writes_pinned_workflow(tmp_path: Path, monkeypatch, capsys) -> None:
@@ -48,7 +48,7 @@ def test_init_writes_pinned_workflow(tmp_path: Path, monkeypatch, capsys) -> Non
     assert code == 0
     out = capsys.readouterr().out
     assert "wrote" in out
-    toml = (tmp_path / "quality.toml").read_text(encoding="utf-8")
+    toml = (tmp_path / "sheriff.toml").read_text(encoding="utf-8")
     assert 'policy = "adopt"' in toml
     workflow = (tmp_path / ".github" / "workflows" / "quality.yml").read_text(
         encoding="utf-8"
@@ -83,7 +83,7 @@ def test_setup_tries_required_check(tmp_path: Path, monkeypatch, capsys) -> None
 
     assert init_repo(tmp_path, require_check=True) == 0
     assert "required The Code Sheriff" in capsys.readouterr().out
-    assert (tmp_path / "quality.toml").is_file()
+    assert (tmp_path / "sheriff.toml").is_file()
 
 
 def test_setup_prints_a_clear_next_step(tmp_path: Path, monkeypatch, capsys) -> None:
@@ -161,7 +161,7 @@ def test_setup_writes_agent_loop_files(tmp_path: Path, monkeypatch) -> None:
     assert (tmp_path / "AGENTS.md").is_file()
     assert (tmp_path / "CLAUDE.md").is_file()
     assert (tmp_path / ".github" / "copilot-instructions.md").is_file()
-    assert (tmp_path / ".quality" / "rules" / "clean-code.md").is_file()
+    assert (tmp_path / ".sheriff" / "rules" / "clean-code.md").is_file()
     assert "codesheriff_fix" in skill or "codesheriff fix" in skill
     assert "certificate" in skill
 
@@ -173,6 +173,39 @@ def test_setup_keeps_existing_agents_md(tmp_path: Path, monkeypatch) -> None:
 
     assert init_repo(tmp_path, agents=True) == 0
     assert (tmp_path / "AGENTS.md").read_text(encoding="utf-8") == "team rules only\n"
+
+
+def test_setup_dry_run_writes_nothing(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.setattr("quality_gates.onboard.resolve_pin", lambda *a, **k: PIN)
+    from quality_gates.onboard import init_repo
+
+    assert init_repo(tmp_path, hooks=True, dry_run=True) == 0
+    out = capsys.readouterr().out
+    assert "dry-run" in out
+    assert "create:" in out
+    assert not (tmp_path / "sheriff.toml").exists()
+    assert not (tmp_path / ".github" / "workflows" / "quality.yml").exists()
+    assert not (tmp_path / ".pre-commit-config.yaml").exists()
+
+
+def test_setup_dry_run_reports_overwrite(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.setattr("quality_gates.onboard.resolve_pin", lambda *a, **k: PIN)
+    from quality_gates.onboard import init_repo
+
+    (tmp_path / "sheriff.toml").write_text('policy = "enforce"\n', encoding="utf-8")
+    assert init_repo(tmp_path, force=True, dry_run=True) == 0
+    assert "overwrite:" in capsys.readouterr().out
+    assert (tmp_path / "sheriff.toml").read_text(encoding="utf-8") == (
+        'policy = "enforce"\n'
+    )
+
+
+def test_cli_setup_supports_dry_run(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.setattr("quality_gates.onboard.resolve_pin", lambda *a, **k: PIN)
+    code = main(["--root", str(tmp_path), "setup", "--dry-run"])
+    assert code == 0
+    assert "dry-run" in capsys.readouterr().out
+    assert not (tmp_path / "sheriff.toml").exists()
 
 
 def test_workflow_yaml_names_the_check() -> None:

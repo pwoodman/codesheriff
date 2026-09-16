@@ -10,6 +10,8 @@ from quality_gates.models import Finding
 from quality_gates.review.parse import fingerprint
 
 FEEDBACK_FILE = "feedback.json"
+COMMITTED_FEEDBACK_FILE = ".sheriff/feedback.json"
+LEGACY_FEEDBACK_FILE = ".quality/feedback.json"
 REACTION_MAP = {
     "+1": "useful",
     "heart": "useful",
@@ -34,15 +36,42 @@ def classify_reaction(content: str) -> str | None:
     return REACTION_MAP.get((content or "").strip().lower())
 
 
-def load_feedback(root: Path) -> dict[str, Any]:
-    path = root / ".quality-reports" / FEEDBACK_FILE
+def _paths(root: Path) -> list[Path]:
+    return [
+        root / COMMITTED_FEEDBACK_FILE,
+        root / LEGACY_FEEDBACK_FILE,
+        root / ".quality-reports" / FEEDBACK_FILE,
+    ]
+
+
+def _read(path: Path) -> dict[str, Any]:
     if not path.is_file():
-        return {"rules": {}, "events": []}
+        return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {"rules": {}, "events": []}
-    return data if isinstance(data, dict) else {"rules": {}, "events": []}
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def load_feedback(root: Path) -> dict[str, Any]:
+    """Merge the committed store with the local cache (committed values win)."""
+    merged: dict[str, Any] = {"rules": {}, "events": []}
+    for path in _paths(root):
+        data = _read(path)
+        rules = data.get("rules") if isinstance(data.get("rules"), dict) else {}
+        for rule, bucket in rules.items():
+            if not isinstance(bucket, dict):
+                continue
+            target = merged["rules"].setdefault(
+                rule, {"useful": 0, "not_useful": 0, "incorrect": 0}
+            )
+            for key in ("useful", "not_useful", "incorrect"):
+                target[key] = max(int(target.get(key) or 0), int(bucket.get(key) or 0))
+        events = data.get("events")
+        if isinstance(events, list):
+            merged["events"].extend(events)
+    return merged
 
 
 def record_feedback(
@@ -53,23 +82,21 @@ def record_feedback(
     reason: str = "",
     path: str | None = None,
 ) -> dict[str, Any]:
-    data = load_feedback(root)
-    rules = data.setdefault("rules", {})
-    bucket = rules.setdefault(rule, {"useful": 0, "not_useful": 0, "incorrect": 0})
-    if disposition in bucket:
-        bucket[disposition] += 1
     event = {
         "rule": rule,
         "disposition": disposition,
         "reason": reason,
         "path": path,
     }
-    data.setdefault("events", []).append(event)
-    reports = root / ".quality-reports"
-    reports.mkdir(parents=True, exist_ok=True)
-    (reports / FEEDBACK_FILE).write_text(
-        json.dumps(data, indent=2) + "\n", encoding="utf-8"
-    )
+    for dest in _paths(root):
+        data = _read(dest)
+        rules = data.setdefault("rules", {})
+        bucket = rules.setdefault(rule, {"useful": 0, "not_useful": 0, "incorrect": 0})
+        if disposition in bucket:
+            bucket[disposition] = int(bucket.get(disposition) or 0) + 1
+        data.setdefault("events", []).append(event)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return event
 
 
