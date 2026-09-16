@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from quality_gates.registry import ALL_LANGUAGES as ALL_LANGUAGES
 
-__version__ = "1.15.5"
+__version__ = "1.16.0"
 
 GATES = (
     "format",

@@ -7,6 +7,7 @@ useDefault = true
 paths = [
   '''(^|/)tests/fixtures/''',
   '''(^|/)tests/test_redact\.py$''',
+  '''(^|/)tests/test_guard_replay_risk\.py$''',
   '''(^|/)package-lock\.json$''',
   '''(^|/)go\.sum$''',
   '''(^|/)configs/semgrep\.yml$''',
