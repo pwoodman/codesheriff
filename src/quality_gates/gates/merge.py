@@ -216,7 +216,7 @@ def _verify_merged(
                         "merged tree — overlapping edits likely broke the build"
                     ),
                     severity="error",
-                    verify=f"git fetch --prune && git rebase {theirs} && quality compile",
+                    verify=f"git fetch --prune && git rebase {theirs} && codesheriff compile",
                 )
             )
             findings.extend(
@@ -243,7 +243,7 @@ def _verify_merged(
                         f"{hint}"
                     ),
                     severity="error",
-                    verify=f"git fetch --prune && git rebase {theirs} && quality impact",
+                    verify=f"git fetch --prune && git rebase {theirs} && codesheriff impact",
                     suggestion=(
                         "Stage new modules with `git add`, then re-run `codesheriff merge`."
                         if extra
@@ -262,7 +262,7 @@ def _verify_merged(
                         rule="semantic-conflict",
                         message=f"clean Git merge vs {theirs}, but tests fail on the merged tree",
                         severity="error",
-                        verify=f"git fetch --prune && git rebase {theirs} && quality test",
+                        verify=f"git fetch --prune && git rebase {theirs} && codesheriff test",
                     )
                 )
         notes.append(f"verify compile: {compile_result.status}")

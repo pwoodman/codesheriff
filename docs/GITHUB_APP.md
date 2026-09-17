@@ -16,7 +16,7 @@ branch protection still use **The Code Sheriff**. CLI is `quality` or
 In the repo you want to scan:
 
 ```bash
-uvx --from git+https://github.com/pwoodman/the-code-sheriff.git quality setup
+uvx --from git+https://github.com/pwoodman/codesheriff.git quality setup
 ```
 
 That writes a default `quality.toml`, pins `.github/workflows/quality.yml`,

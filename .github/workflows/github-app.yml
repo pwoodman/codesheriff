@@ -88,6 +88,8 @@ jobs:
           QUALITY_TRUSTED_BASE: origin/${{ steps.job.outputs.base }}
           QUALITY_TRUST: ${{ steps.job.outputs.fork == 'true' && 'untrusted' || '' }}
           QUALITY_REVIEW_COMMAND: ${{ steps.job.outputs.command }}
+          QUALITY_REVIEW_FOCUS: ${{ steps.job.outputs.focus }}
+          QUALITY_REVIEW_ARGUMENT: ${{ steps.job.outputs.argument }}
           OPENAI_API_KEY: ${{ steps.job.outputs.fork != 'true' && secrets.OPENAI_API_KEY || '' }}
           ANTHROPIC_API_KEY: ${{ steps.job.outputs.fork != 'true' && secrets.ANTHROPIC_API_KEY || '' }}
         run: quality run --base "origin/${{ steps.job.outputs.base }}"

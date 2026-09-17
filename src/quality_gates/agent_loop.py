@@ -27,7 +27,7 @@ LOOP_BODY = """Chat is not proof. After edits, loop until the oracle is green an
 6. Unresolved GitHub review comments are remaining work
 7. Only then commit, open a PR, or auto-merge
 
-Custom standards: `.quality/rules/*.md`. `AGENTS.md`, `CLAUDE.md`,
+Custom standards: `.sheriff/rules/*.md`. `AGENTS.md`, `CLAUDE.md`,
 `.github/copilot-instructions.md`, and `.cursor/rules` are enforced as review
 rules automatically.
 """
@@ -75,7 +75,7 @@ into main; `codesheriff_pr_comments` lists unresolved review threads.
 - Mechanical gates (format, lint, regex, packages, DRY, security, compile,
   impact, tests, coverage, audit, UI, version, merge) beat model self-assessment.
 - Prefer `codesheriff fix` before hand-editing format/lint.
-- Custom markdown in `.quality/rules/` is enforced on the change set.
+- Custom markdown in `.sheriff/rules/` is enforced on the change set.
 - `AGENTS.md`, `CLAUDE.md`, and `.cursor/rules` are ingested as review rules.
 - Never skip the oracle because unit tests "looked fine" in conversation.
 - Rebase when merge reports `textual-conflict`. Do not invent a merge.
@@ -135,7 +135,7 @@ def write_agent_integrations(root: Path, *, force: bool = False) -> list[str]:
             root / ".github" / "instructions" / "the-code-sheriff.instructions.md",
             AGENTS_MD,
         ),
-        (root / ".quality" / "rules" / "clean-code.md", CLEAN_CODE_RULE),
+        (root / ".sheriff" / "rules" / "clean-code.md", CLEAN_CODE_RULE),
     )
     for path, content in files:
         notes.append(_write_if_allowed(path, content, force=force))

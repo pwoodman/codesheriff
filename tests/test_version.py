@@ -35,7 +35,7 @@ def test_inconsistent_versions_fail(tmp_path: Path) -> None:
     assert finding.path == "pyproject.toml"
     assert finding.line == 3
     assert finding.reason
-    assert "quality bump" in (finding.suggestion or "")
+    assert "codesheriff bump" in (finding.suggestion or "")
 
 
 def test_non_semver_fails(tmp_path: Path) -> None:

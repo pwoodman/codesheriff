@@ -317,7 +317,7 @@ def _bump_required(
                 rule="bump-required",
                 message=(
                     "source changed without a version bump. "
-                    f"Run `quality bump {suggested}` (conventional commits suggest {suggested})."
+                    f"Run `codesheriff bump {suggested}` (conventional commits suggest {suggested})."
                 ),
             )
         )

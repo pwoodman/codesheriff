@@ -3,7 +3,7 @@
 ## Five-minute setup
 
 ```bash
-uvx --from git+https://github.com/pwoodman/the-code-sheriff.git quality setup
+uvx --from git+https://github.com/pwoodman/codesheriff.git quality setup
 ```
 
 Run it from the repository you want to protect. The command detects the
@@ -24,7 +24,7 @@ Hooks and coding-agent integrations are optional local conveniences. Use
 `quality setup --no-hooks --no-agents` when you want the smallest possible
 installation.
 
-No `uv`? `pip install "git+https://github.com/pwoodman/the-code-sheriff.git"` then
+No `uv`? `pip install "git+https://github.com/pwoodman/codesheriff.git"` then
 `quality setup`.
 
 ## What users see

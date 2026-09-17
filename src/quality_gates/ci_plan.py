@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 
 from quality_gates import GATES
 from quality_gates.config import DEFAULT_GITHUB_GATES, QualityConfig
@@ -79,3 +80,45 @@ def select_change_gates(gates: list[str], paths: list[str]) -> list[str]:
         if capability not in selected:
             selected.append(capability)
     return [gate for gate in GATES if gate in selected]
+
+
+def risk_decision(
+    gates: list[str],
+    paths: list[str],
+    *,
+    required: Iterable[str] = (),
+    mode: str = "off",
+) -> tuple[list[str], list[str]]:
+    """Profile the gate plan against the change surface.
+
+    ``auto`` widens the plan when the diff touches a risk zone (auth, payments,
+    migrations, parsers) and narrows it — dropping heavy gates that nothing in
+    the diff justifies — when the diff has no risk surface at all. Required
+    gates (``fail_on``) are never dropped.
+    """
+    selected = list(gates)
+    if mode != "auto" or not paths:
+        return selected, []
+    capabilities = triggered_capabilities(paths)
+    if capabilities:
+        widened = sorted(
+            gate for gate in GATES if gate in capabilities and gate not in selected
+        )
+        if not widened:
+            return selected, [
+                f"risk-wide: {', '.join(sorted(capabilities))} already scheduled"
+            ]
+        return [gate for gate in GATES if gate in selected or gate in capabilities], [
+            f"risk-wide: added {', '.join(widened)} for {', '.join(sorted(capabilities))}"
+        ]
+    keep = set(required)
+    narrowed = [gate for gate in selected if gate not in HEAVY_GATES or gate in keep]
+    dropped = [gate for gate in selected if gate not in narrowed]
+    if not dropped:
+        return selected, [
+            f"risk-narrow: nothing to drop ({len(paths)} changed path(s), no risk zone)"
+        ]
+    return narrowed, [
+        f"risk-narrow: dropped {', '.join(dropped)} "
+        f"({len(paths)} changed path(s), no risk zone; `--full` to override)"
+    ]

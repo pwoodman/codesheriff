@@ -1,5 +1,10 @@
 # Changelog
 
+
+## 1.16.0
+
+- minor release.
+
 ## 1.15.5
 
 - Rebrand the public CLI and MCP namespace as `codesheriff`, retaining

@@ -13,6 +13,8 @@ COMMANDS = (
     "check",
     "fix",
     "ignore",
+    "suppress",
+    "why",
     "help",
 )
 CHECK_FOCUSES = ("security", "tests", "migration", "architecture")
@@ -24,6 +26,8 @@ HELP = """The Code Sheriff commands (prefix `/sheriff` so they do not collide wi
 - `/sheriff check security` — security-focused review
 - `/sheriff check tests` — test-gap review
 - `/sheriff fix` — generate fix suggestions / a separate fix PR
+- `/sheriff suppress <finding-id> [reason]` — accept a specific finding (committed)
+- `/sheriff why <finding-id>` — show the evidence trail for a finding
 - `/sheriff ignore <rule> [reason]` — suppress a finding with rationale
 - `/sheriff help` — this list
 """
@@ -44,6 +48,15 @@ class SheriffCommand:
     @property
     def forces_review(self) -> bool:
         return self.name in {"review", "check", "explain", "fix", "summary"}
+
+    @property
+    def finding_id(self) -> str:
+        return self.argument.split()[0] if self.argument.split() else ""
+
+    @property
+    def reason(self) -> str:
+        parts = self.argument.split(maxsplit=1)
+        return parts[1] if len(parts) > 1 else ""
 
 
 def parse_sheriff_command(body: str | None) -> SheriffCommand | None:

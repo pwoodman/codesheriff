@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,15 @@ from quality_gates.models import Finding, GateResult
 from quality_gates.playbook import autofix_command, build_playbook
 from quality_gates.report import load_results
 from quality_gates.review.contract import agent_prompt, finding_payload, verify_command
+
+
+def signing_key() -> str | None:
+    """Optional certificate signing key; absent means unsigned certificates."""
+    return os.environ.get("SHERIFF_CERT_KEY") or None
+
+
+STALL_LIMIT = 3
+STALL_FILE = "oracle-state.json"
 
 
 def remaining_from_results(
@@ -63,6 +73,75 @@ def remaining_from_results(
     return payload
 
 
+def track_stall(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    """Detect an agent loop that repeats the same next action without progress.
+
+    Returns ``{"needs_human", "repeats"}`` and persists a small counter so a
+    headless loop can stop and hand off instead of spinning forever.
+    """
+    signature = _progress_signature(payload)
+    state = _load_stall_state(root)
+    if state.get("signature") == signature and signature:
+        state["repeats"] = int(state.get("repeats") or 0) + 1
+    else:
+        state = {"signature": signature, "repeats": 1}
+    _save_stall_state(root, state)
+    repeats = int(state["repeats"])
+    needs_human = (
+        not payload.get("green") and bool(signature) and repeats >= STALL_LIMIT
+    )
+    if needs_human:
+        payload["needs_human"] = True
+        payload["stall"] = {
+            "signature": signature,
+            "repeats": repeats,
+            "reason": (
+                f"the oracle repeated the same next action {repeats}x without "
+                "reducing blockers"
+            ),
+        }
+    else:
+        payload.pop("needs_human", None)
+    return {"needs_human": needs_human, "repeats": repeats}
+
+
+def _progress_signature(payload: dict[str, Any]) -> str:
+    playbook = payload.get("playbook") or {}
+    nxt = playbook.get("next") or {}
+    blockers = payload.get("blocking") or []
+    keys = sorted(
+        f"{item.get('gate')}|{item.get('rule')}|{item.get('path')}|{item.get('line')}"
+        for item in blockers
+        if isinstance(item, dict)
+    )
+    return f"{nxt.get('command') or nxt.get('gate') or ''}::{len(blockers)}::{hash(tuple(keys))}"
+
+
+def reset_stall(root: Path) -> None:
+    """Clear the stall counter after a human intervention."""
+    with suppress(OSError):
+        (root / ".quality-reports" / STALL_FILE).unlink()
+
+
+def _load_stall_state(root: Path) -> dict[str, Any]:
+    path = root / ".quality-reports" / STALL_FILE
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _save_stall_state(root: Path, state: dict[str, Any]) -> None:
+    directory = root / ".quality-reports"
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / STALL_FILE).write_text(
+        json.dumps(state, indent=2) + "\n", encoding="utf-8"
+    )
+
+
 def remaining_from_reports(root: Path) -> dict[str, Any]:
     report_dir = root / ".quality-reports"
     results, _policy = load_results(report_dir)
@@ -84,12 +163,21 @@ def remaining_from_reports(root: Path) -> dict[str, Any]:
         payload["green"] = False
         payload["next"] = "no .quality-reports — run `codesheriff oracle --run` first"
     payload["playbook"] = build_playbook(payload)
+    stall = track_stall(root, payload)
+    if stall["needs_human"]:
+        payload["next"] = (
+            f"Oracle stalled after {stall['repeats']} identical next actions "
+            f"({payload['stall']['reason']}). A human decision is required before "
+            "this can go green — re-run with `--reset-stall` after intervening."
+        )
     payload["certificate"] = build_certificate(payload, root=root)
     if payload.get("green") and payload["certificate"].get("ready"):
         payload["next"] = (
             "All blocking gates are green. Merge certificate is ready — "
             "auto-merge is safe if The Code Sheriff is a required check."
         )
+    elif payload.get("needs_human"):
+        pass
     elif not payload.get("green"):
         instruction = (payload["playbook"].get("next") or {}).get("instruction")
         if instruction and "oracle --run" not in str(payload.get("next") or ""):
@@ -97,7 +185,7 @@ def remaining_from_reports(root: Path) -> dict[str, Any]:
                 f"{instruction} Then run `codesheriff oracle --run` again."
             )
     with suppress(OSError):
-        write_certificate(root, payload)
+        write_certificate(root, payload, key=signing_key())
     return payload
 
 
@@ -165,6 +253,18 @@ def _attach_pr_comments(root: Path, payload: dict[str, Any]) -> None:
 
 
 def render_prompt(payload: dict[str, Any]) -> str:
+    if payload.get("needs_human"):
+        stall = payload.get("stall") or {}
+        return (
+            "The Code Sheriff oracle has stalled: "
+            f"{stall.get('reason') or 'the same next action kept repeating'}.\n"
+            "STOP. Do not re-run the oracle. A human must decide one of:\n"
+            "- accept the finding (`codesheriff suppress <id> --reason '...'`)\n"
+            "- change the rule/threshold in sheriff.toml\n"
+            "- fix it by hand if the automatic path is wrong\n"
+            "After intervening, clear the counter with "
+            "`codesheriff oracle --reset-stall` and re-run."
+        )
     review_errors = [
         item
         for item in (payload.get("review") or {}).get("findings") or []

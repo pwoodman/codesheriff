@@ -1,4 +1,4 @@
-"""Write The Code Sheriff defaults: quality.toml, pinned workflow, required check."""
+"""Write The Code Sheriff defaults: sheriff.toml, pinned workflow, required check."""
 
 from __future__ import annotations
 
@@ -24,60 +24,60 @@ _GITHUB_REPO = re.compile(
 
 def consumer_toml(policy: str = "adopt", review_provider: str = "auto") -> str:
     return f"""# The Code Sheriff defaults. Every key is optional.
-# policy=adopt grandfathers existing issues after `quality baseline`.
+# policy=adopt grandfathers existing issues after `codesheriff baseline`.
 
-[quality]
+[sheriff]
 languages = ["auto"]
 policy = "{policy}"
-baseline = ".quality-baseline.json"
+baseline = ".sheriff-baseline.json"
 comment_on_pr = true
 fail_on = ["format", "lint", "regex", "packages", "dry", "dead", "security", "compile", "contract", "impact", "test", "coverage", "audit", "ui", "version", "merge"]
 ai_review = "pr-only"
 
-[quality.ci]
+[sheriff.ci]
 mode = "local"
 github_gates = ["format", "lint", "regex", "packages", "security", "impact", "audit", "version", "merge", "review", "comments"]
 
-[quality.compile]
+[sheriff.compile]
 require_security = true
 
-[quality.coverage]
+[sheriff.coverage]
 line = 80
 branch = 0
 tool = "auto"
 
-[quality.audit]
+[sheriff.audit]
 fail_on_priority = ["P0"]
 min_confidence = "HIGH"
 
-[quality.ui]
+[sheriff.ui]
 select = "changed"
 on_github = false
 
-[quality.impact]
+[sheriff.impact]
 depth = 4
 require_downstream = true
 
-[quality.merge]
+[sheriff.merge]
 verify = "auto"
 siblings = false
 # codesheriff setup --auto-merge enables GitHub repo auto-merge. Land PRs when
 # `codesheriff certify` reports auto_merge=ready and The Code Sheriff is required.
 
-[quality.comments]
+[sheriff.comments]
 in_oracle = true
 fail = false
 
-[quality.version]
+[sheriff.version]
 require_changelog = "if-present"
 
-[quality.format]
+[sheriff.format]
 prefer_project_tools = true
 
-[quality.lint]
+[sheriff.lint]
 prefer_project_tools = true
 
-[quality.review]
+[sheriff.review]
 provider = "{review_provider}"
 inline_comments = true
 check_run = true
@@ -85,13 +85,13 @@ incremental = true
 risk = "auto"
 ingest_agent_files = true          # AGENTS.md, CLAUDE.md, .cursor/rules
 
-[quality.test]
+[sheriff.test]
 require_for_source = true
 timing = true
 timing_regression_pct = 15
 timing_min_delta_ms = 50
 
-[quality.packages]
+[sheriff.packages]
 require_declared = true
 """
 
@@ -423,59 +423,95 @@ def init_repo(
     agents: bool = False,
     auto_merge: bool = False,
     review_provider: str = "auto",
+    dry_run: bool = False,
 ) -> int:
     source_repo = resolve_source(org, source)
     resolved = resolve_pin(source_repo, pin)
     notes: list[str] = []
+    planned: list[tuple[Path, str]] = []
 
-    config_path = root / "quality.toml"
+    def _stage(path: Path, text: str, note: str) -> None:
+        planned.append((path, text))
+        notes.append(note)
+
+    from quality_gates.config import config_path as _existing_config
+
+    config_path = _existing_config(root)
+    if config_path.name == "quality.toml" and not config_path.exists():
+        config_path = root / "sheriff.toml"
     if force or not config_path.exists():
-        config_path.write_text(
-            consumer_toml(policy, review_provider=review_provider), encoding="utf-8"
+        _stage(
+            config_path,
+            consumer_toml(policy, review_provider=review_provider),
+            f"wrote {config_path} (policy={policy})",
         )
-        notes.append(f"wrote {config_path} (policy={policy})")
     else:
         notes.append(f"kept existing {config_path}")
 
     workflow_dir = root / ".github" / "workflows"
-    workflow_dir.mkdir(parents=True, exist_ok=True)
     reusable = workflow_dir / "quality.yml"
     if _should_write_workflow(reusable, force=force):
-        reusable.write_text(workflow_yaml(source_repo, resolved), encoding="utf-8")
-        notes.append(f"wrote {reusable} → {source_repo}@{resolved}")
+        _stage(
+            reusable,
+            workflow_yaml(source_repo, resolved),
+            f"wrote {reusable} → {source_repo}@{resolved}",
+        )
     else:
         notes.append(f"kept existing {reusable}")
 
     if vendor_cli:
         local = workflow_dir / "quality-cli.yml"
         if _should_write_workflow(local, force=force):
-            local.write_text(vendor_cli_yaml(source_repo, resolved), encoding="utf-8")
-            notes.append(f"wrote {local}")
+            _stage(local, vendor_cli_yaml(source_repo, resolved), f"wrote {local}")
         else:
             notes.append(f"kept existing {local}")
 
     if hooks:
         hook_path = root / ".pre-commit-config.yaml"
         if force or not hook_path.exists():
-            hook_path.write_text(
-                consumer_precommit(source_repo, resolved), encoding="utf-8"
+            _stage(
+                hook_path,
+                consumer_precommit(source_repo, resolved),
+                f"wrote {hook_path}",
             )
-            notes.append(f"wrote {hook_path}")
         else:
             notes.append(f"kept existing {hook_path}")
 
     if agents:
         from quality_gates.agent_loop import write_agent_integrations
 
-        notes.extend(write_agent_integrations(root, force=force))
+        if dry_run:
+            notes.append("would write agent integrations (AGENTS.md, CLAUDE.md, ...)")
+        else:
+            notes.extend(write_agent_integrations(root, force=force))
     else:
-        rule = root / ".quality" / "rules" / "clean-code.md"
+        rule = root / ".sheriff" / "rules" / "clean-code.md"
         if force or not rule.is_file():
             from quality_gates.agent_loop import CLEAN_CODE_RULE
 
-            rule.parent.mkdir(parents=True, exist_ok=True)
-            rule.write_text(CLEAN_CODE_RULE, encoding="utf-8")
-            notes.append(f"wrote {rule}")
+            _stage(rule, CLEAN_CODE_RULE, f"wrote {rule}")
+
+    if dry_run:
+        print("codesheriff setup --dry-run (no files written)")
+        for path, text in planned:
+            exists = "overwrite" if path.exists() else "create"
+            print(f"  {exists}: {path} ({len(text.splitlines())} lines)")
+        for line in notes:
+            if line.startswith("kept") or line.startswith("would"):
+                print(f"  {line}")
+        if require_check:
+            print("  would enable the required status check")
+        if auto_merge:
+            print("  would enable repository auto-merge")
+        if hooks:
+            print("  would install git hooks")
+        if not _SHA.fullmatch(resolved):
+            print(f"  could not pin a SHA for {source_repo}; would use @{resolved}")
+        return 0
+
+    for path, text in planned:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
 
     for line in notes:
         print(line)

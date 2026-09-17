@@ -62,7 +62,7 @@ def _to_finding(item: AuditFinding, blocking: bool) -> Finding:
         suggestion=item.fix,
         snippet=item.evidence,
         confidence=item.confidence,
-        verify="quality audit",
+        verify="codesheriff audit",
     )
 
 

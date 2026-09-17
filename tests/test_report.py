@@ -133,7 +133,7 @@ def test_quality_report_reprints_last_run(tmp_path: Path, capsys, monkeypatch) -
     assert code == 1
     out = capsys.readouterr().out
     assert "Bump the version" in out
-    assert "quality bump auto" in out
+    assert "codesheriff bump auto" in out
 
 
 def test_quality_report_missing_file_returns_2(

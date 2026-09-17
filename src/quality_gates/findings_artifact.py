@@ -104,7 +104,7 @@ def reconcile_last_findings(root: Path, results: list[GateResult]) -> list[Findi
                 message=f"[still present] {row.get('message')}",
                 snippet=snippet,
                 suggestion=(
-                    f"quality ignore add --rule {row.get('rule') or '*'} "
+                    f"codesheriff ignore add --rule {row.get('rule') or '*'} "
                     f"--path {path} --reason 'accepted leftover'"
                 ),
             )

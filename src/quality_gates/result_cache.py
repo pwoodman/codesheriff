@@ -65,6 +65,7 @@ def _digest_file(digest: Any, root: Path, path: Path) -> None:
 
 def _tool_inputs(root: Path) -> list[Path]:
     patterns = (
+        "sheriff.toml",
         "quality.toml",
         "pyproject.toml",
         "package.json",

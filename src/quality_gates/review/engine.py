@@ -63,6 +63,22 @@ def run_review(
     manifest: ChangeManifest | None = None,
 ) -> GateResult:
     command = os.environ.get("QUALITY_REVIEW_COMMAND") or ""
+    focus = os.environ.get("QUALITY_REVIEW_FOCUS") or ""
+    argument = os.environ.get("QUALITY_REVIEW_ARGUMENT") or ""
+    explain_mode = command == "explain"
+    if explain_mode:
+        named_command = "explain"
+    elif command == "check" and focus in {
+        "security",
+        "tests",
+        "migration",
+        "architecture",
+    }:
+        named_command = focus
+    elif command == "summary":
+        named_command = "summary"
+    else:
+        named_command = ""
     if config.ai_review == "never" and not command:
         return GateResult(name="review", status="skip", notes=["ai_review = never"])
     if not getattr(config, "review_automatic", True) and not command and not base:
@@ -161,6 +177,10 @@ def run_review(
     paths = changed_paths(diff)
     specialists = _specialists(paths, diff)
     named = getattr(config, "review_named_mode", "standard")
+    if explain_mode:
+        named = "explain"
+    elif named_command and named == "standard":
+        named = named_command
     if (
         named in {"security", "tests", "migration", "architecture"}
         and named not in specialists
@@ -186,7 +206,7 @@ def run_review(
                 item.suggestion = (
                     item.suggestion
                     or "add a test, or `quality:ignore-file missing-tests` / "
-                    "`quality ignore add --rule missing-tests`"
+                    "`codesheriff ignore add --rule missing-tests`"
                 )
     # PR-controlled rules are evidence, never authority, until the repository
     # is trusted. This prevents a change from weakening its own review policy.
@@ -209,11 +229,15 @@ def run_review(
         related=related,
         specialists=specialists,
         packs=render_packs(packs),
+        question=argument if explain_mode else "",
     )
 
     tier = classify_review_risk(paths, diff, prior, config)
     mode = (config.review_mode or "auto").lower()
-    if getattr(config, "review_named_mode", "standard") == "fast":
+    if explain_mode:
+        mode = "single"
+        tier = "cheap" if tier == "full" else tier
+    if named == "fast":
         mode = "heuristic"
         tier = "cheap" if tier == "full" else tier
     if getattr(config, "review_confidence_mode", "balanced") == "conservative":
@@ -428,6 +452,10 @@ def run_review(
         notes.append(f"incremental review: {n_new} new hunk line(s)")
     if model:
         notes.append(f"model: {model}")
+    if explain_mode:
+        notes.append(
+            f"explain command: {argument.strip() or 'what does this change do'}"
+        )
     if config.trust != "trusted":
         notes.append("untrusted repository rules were excluded from review authority")
     if partial:
@@ -456,6 +484,12 @@ def run_review(
             )
         )
         notes.append(sync_pr_summary(structured or llm_summary or body))
+        if explain_mode:
+            from quality_gates.github_comment import post_pr_comment
+            from quality_gates.review.explain import explain_diff
+
+            answer = llm_summary or explain_diff(argument, paths)
+            notes.append(post_pr_comment(f"### Sheriff explain\n\n{answer.strip()}"))
         commented.extend(
             fingerprint(item, bucket=1) for item in posted if item.rule != "languages"
         )
@@ -566,6 +600,7 @@ def _prompt(
     related: list[tuple[str, str]],
     specialists: list[str],
     packs: str = "- none",
+    question: str = "",
 ) -> str:
     bullets = "\n".join(
         f"- [{item.severity}] {item.path or ''}:{item.line or ''} {item.message}"
@@ -586,10 +621,16 @@ def _prompt(
         )
         or "- none"
     )
+    explain_block = (
+        "\nThe reviewer asked a question; answer it directly and cite the code:\n"
+        f"Q: {question.strip()}\n"
+        if question.strip()
+        else ""
+    )
     return f"""You are reviewing a change for bugs formatters and linters cannot prove.
 Languages: {", ".join(languages) or "unknown"}.
 {STANDARDS_BRIEF}
-
+{explain_block}
 Selected specialist lenses: {", ".join(specialists) or "general correctness"}.
 
 Authority & Isolation constraints:

@@ -52,7 +52,7 @@ def compare_timings(
                             f"{pct:.0f}% slower than last touched run "
                             f"({baseline:.3f}s; threshold {config.test_timing_regression_pct:g}%)"
                         ),
-                        suggestion=f"quality timing accept --test {nodeid}",
+                        suggestion=f"codesheriff timing accept --test {nodeid}",
                     )
                 )
                 tests[nodeid] = {

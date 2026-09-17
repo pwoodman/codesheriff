@@ -37,7 +37,7 @@ def test_adopt_without_baseline_does_not_block(tmp_path: Path) -> None:
 
 def test_adopt_rejects_a_corrupt_baseline(tmp_path: Path) -> None:
     config = QualityConfig(policy="adopt")
-    (tmp_path / ".quality-baseline.json").write_text("not json", encoding="utf-8")
+    (tmp_path / ".sheriff-baseline.json").write_text("not json", encoding="utf-8")
 
     results, _ = apply_policy([_failing("lint", "E001", "a.py")], tmp_path, config)
 
@@ -48,11 +48,11 @@ def test_adopt_rejects_a_corrupt_baseline(tmp_path: Path) -> None:
 def test_adopt_rejects_a_deleted_tracked_baseline(tmp_path: Path) -> None:
     config = QualityConfig(policy="adopt")
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
-    (tmp_path / ".quality-baseline.json").write_text(
+    (tmp_path / ".sheriff-baseline.json").write_text(
         '{"fingerprints": []}\n', encoding="utf-8"
     )
-    subprocess.run(["git", "add", ".quality-baseline.json"], cwd=tmp_path, check=True)
-    (tmp_path / ".quality-baseline.json").unlink()
+    subprocess.run(["git", "add", ".sheriff-baseline.json"], cwd=tmp_path, check=True)
+    (tmp_path / ".sheriff-baseline.json").unlink()
 
     results, _ = apply_policy([_failing("lint", "E001", "a.py")], tmp_path, config)
 
@@ -97,7 +97,7 @@ def test_baseline_keeps_distinct_repeated_findings(tmp_path: Path) -> None:
 
     write_baseline(tmp_path, config, [duplicate])
 
-    baseline = (tmp_path / ".quality-baseline.json").read_text(encoding="utf-8")
+    baseline = (tmp_path / ".sheriff-baseline.json").read_text(encoding="utf-8")
     assert '"fingerprints": [' in baseline
     assert baseline.count("app.py") == 2
 
@@ -132,7 +132,7 @@ def test_ratchet_removes_repaired_findings(tmp_path: Path) -> None:
 
     write_baseline(tmp_path, config, [], ratchet=True)
 
-    assert '"fingerprints": []' in (tmp_path / ".quality-baseline.json").read_text(
+    assert '"fingerprints": []' in (tmp_path / ".sheriff-baseline.json").read_text(
         encoding="utf-8"
     )
 
@@ -142,7 +142,7 @@ def test_adopt_coverage_respects_repo_baseline(tmp_path: Path) -> None:
     reports = tmp_path / ".quality-reports"
     reports.mkdir()
     (reports / "coverage.json").write_text('{"line_percent": 52.0}\n', encoding="utf-8")
-    (tmp_path / ".quality-baseline.json").write_text(
+    (tmp_path / ".sheriff-baseline.json").write_text(
         '{"version": 1, "coverage_line": 50.0, "fingerprints": []}\n',
         encoding="utf-8",
     )

@@ -115,7 +115,7 @@ def scan_diff(
                         suggestion=(
                             "remove the match, or add `# quality:ignore "
                             f"{name}` on this line / "
-                            f"`quality ignore add --rule {name} --path {current}`"
+                            f"`codesheriff ignore add --rule {name} --path {current}`"
                         ),
                     )
                 )

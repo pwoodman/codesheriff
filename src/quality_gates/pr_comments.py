@@ -150,7 +150,7 @@ def unresolved_findings(threads: list[ReviewThread] | None = None) -> list[Findi
                 patch=_suggestion_patch(thread.path, suggestion)
                 if suggestion
                 else None,
-                verify="quality comments",
+                verify="codesheriff comments",
                 reason=f"unresolved review by {thread.author or 'reviewer'}",
                 documentation_url=thread.url or None,
             )

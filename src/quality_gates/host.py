@@ -50,7 +50,9 @@ def api_base() -> str:
 def html_base() -> str:
     explicit = os.environ.get("GITHUB_SERVER_URL") or os.environ.get("GH_HOST")
     if explicit:
-        return explicit.rstrip("/")
+        # GH_HOST is a bare host ("github.com"), unlike GITHUB_SERVER_URL.
+        explicit = explicit.rstrip("/")
+        return explicit if "://" in explicit else f"https://{explicit}"
     api = api_base()
     if api == DEFAULT_API or api.endswith("://api.github.com"):
         return DEFAULT_HTML
