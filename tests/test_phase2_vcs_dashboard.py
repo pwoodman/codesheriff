@@ -191,8 +191,9 @@ def _wait_for_server(url: str, port: int, *, attempts: int = 100) -> None:
 
 
 def _port_is_listening(port: int) -> bool:
-    with contextlib.suppress(OSError), socket.create_connection(
-        ("127.0.0.1", port), timeout=0.5
+    with (
+        contextlib.suppress(OSError),
+        socket.create_connection(("127.0.0.1", port), timeout=0.5),
     ):
         return True
     return False
