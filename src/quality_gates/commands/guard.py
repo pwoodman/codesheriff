@@ -18,6 +18,10 @@ from pathlib import Path
 from quality_gates.gitutil import git_is_repo
 from quality_gates.models import Finding
 
+# git's conflict marker width: "<<<<<<<" / ">>>>>>>" open/close with 7 chars,
+# "=======" is the 7-char separator.
+_CONFLICT_MARKER_WIDTH = 7
+
 # Line-level patterns. Keep this list short: guard trades coverage for latency.
 _PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     (
@@ -30,7 +34,11 @@ _PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ),
     (
         "merge-conflict",
-        re.compile(r"^(<{7} |>{7} |={7}$)"),
+        re.compile(
+            rf"^(<{{{_CONFLICT_MARKER_WIDTH}}} "
+            rf"|>{{{_CONFLICT_MARKER_WIDTH}}} "
+            rf"|={{{_CONFLICT_MARKER_WIDTH}}}$)"
+        ),
         "unresolved merge conflict marker",
     ),
     (

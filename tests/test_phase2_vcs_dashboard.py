@@ -6,6 +6,7 @@ import contextlib
 import json
 import socket
 import threading
+import time
 import urllib.request
 from pathlib import Path
 
@@ -174,6 +175,29 @@ def test_triage_suppress_and_unsuppress(tmp_path: Path) -> None:
     assert triage(tmp_path, {"action": "suppress"})["ok"] is False
 
 
+def _wait_for_server(url: str, port: int, *, attempts: int = 100) -> None:
+    """Block until the HTTP server accepts connections on ``port``.
+
+    Polls by connecting to the port rather than inspecting the server object,
+    so readiness is observed the same way a real client observes it. Sleeping
+    a fixed amount and hoping is racy on slower runners (macOS CI in
+    particular), where the listener can lag the thread start.
+    """
+    for _ in range(attempts):
+        if _port_is_listening(port):
+            return
+        time.sleep(0.05)
+    raise AssertionError(f"server on {url} never accepted connections")
+
+
+def _port_is_listening(port: int) -> bool:
+    with contextlib.suppress(OSError), socket.create_connection(
+        ("127.0.0.1", port), timeout=0.5
+    ):
+        return True
+    return False
+
+
 def test_serve_dashboard_http(tmp_path: Path) -> None:
     from http.server import ThreadingHTTPServer
 
@@ -202,16 +226,13 @@ def test_serve_dashboard_http(tmp_path: Path) -> None:
     )
     thread.start()
     try:
-        for _ in range(50):
-            if "server" in handler_holder:
-                break
-            threading.Event().wait(0.05)
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as page:
+        _wait_for_server(f"http://127.0.0.1:{port}/", port)
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=10) as page:
             body = page.read().decode("utf-8")
             assert "Sheriff" in body
             assert page.headers.get("Content-Type", "").startswith("text/html")
         with urllib.request.urlopen(
-            f"http://127.0.0.1:{port}/findings", timeout=5
+            f"http://127.0.0.1:{port}/findings", timeout=10
         ) as api:
             assert json.loads(api.read().decode("utf-8")) == {"findings": []}
         assert api_state(tmp_path)["findings"] == {"findings": []}
