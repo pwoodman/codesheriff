@@ -154,3 +154,27 @@ def test_green_oracle_is_merge_ready() -> None:
     )
     playbook = build_playbook(payload)
     assert playbook["remaining"] == 0
+
+
+def test_craft_skips_geometry_in_declarative_assets() -> None:
+    """SVG coordinates and lockfile digests are data, not policy constants."""
+    svg = """diff --git a/docs/getting-started.svg b/docs/getting-started.svg
+--- a/docs/getting-started.svg
++++ b/docs/getting-started.svg
+@@ -1,0 +1,4 @@
++<svg>
++  <tspan x="56" y="396">hello</tspan>
++  <tspan x="56" y="420">world</tspan>
++</svg>
+"""
+    assert [item.rule for item in craft_review(svg)] == []
+
+    lock = """diff --git a/uv.lock b/uv.lock
+--- a/uv.lock
++++ b/uv.lock
+@@ -1,0 +1,3 @@
++name = "x"
++size = 4096
++other = 4096
+"""
+    assert not any(item.rule == "magic-number" for item in craft_review(lock))

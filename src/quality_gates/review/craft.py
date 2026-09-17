@@ -268,9 +268,15 @@ def _finding(
     )
 
 
+# Declarative assets where bare numbers are geometry or data, not policy. A
+# number in an SVG is a coordinate and in a lockfile a pinned digest; naming
+# them would be noise, so keep this list to formats with no executable logic.
+_ASSET_SUFFIXES = (".md", ".svg", ".lock")
+
+
 def _skip_path(path: str) -> bool:
     posix = path.replace("\\", "/").lstrip("./")
-    if posix.endswith(".md"):
+    if posix.endswith(_ASSET_SUFFIXES):
         return True
     lowered = f"/{posix.lower()}/"
     return any(
