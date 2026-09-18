@@ -422,7 +422,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     eval_p.add_argument(
         "--suite",
         dest="eval_suite",
-        choices=["reviewbench", "sheriffbench", "martian", "macroscope", "all"],
+        choices=[
+            "reviewbench",
+            "sheriffbench",
+            "martian",
+            "macroscope",
+            "aacrbench",
+            "aacrhard",
+            "all",
+        ],
         default="reviewbench",
     )
     eval_p.add_argument(
