@@ -192,6 +192,12 @@ def render_structured_summary(
         lines.extend(
             ["", "Not deeply analyzed:", *[f"- {item}" for item in incomplete]]
         )
+    if paths:
+        from quality_gates.review.diagrams import generate_mermaid_sequence_diagram
+
+        diag = generate_mermaid_sequence_diagram(paths)
+        if diag:
+            lines.extend(["", "### Control Flow Diagram", diag])
     return "\n".join(lines).strip() + "\n"
 
 

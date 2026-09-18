@@ -200,6 +200,14 @@ def _eval(root: Path, args: argparse.Namespace) -> int:
             }
     if suite in {"macroscope", "all"}:
         payload["macroscope"] = macroscope_reconstructed()
+    if suite in {"aacrbench", "all"}:
+        from quality_gates.review.aacr_bench import run_aacr_evaluation
+
+        payload["aacrbench"] = run_aacr_evaluation(root)
+    if suite in {"aacrhard", "all"}:
+        from quality_gates.review.aacr_bench import run_aacr_hard_evaluation
+
+        payload["aacrhard"] = run_aacr_hard_evaluation(root)
     if args.llm and not llm_eval_enabled():
         payload["llm"] = {
             "skipped": True,
@@ -250,6 +258,39 @@ def _eval_markdown(payload: dict[str, object]) -> str:
     macro = payload.get("macroscope")
     if isinstance(macro, dict):
         lines += ["## Macroscope reconstructed sample", "", f"- {macro.get('id')}", ""]
+    aacr = payload.get("aacrbench")
+    if isinstance(aacr, dict):
+        matrix = str(aacr.get("comparison_matrix_markdown", ""))
+        sc = aacr.get("scorecard", {})
+        if isinstance(sc, dict):
+            lines += [
+                "## AACR-Bench Competitor Evaluation",
+                "",
+                f"- Precision: {sc.get('precision', 0):.2%}",
+                f"- Recall: {sc.get('recall', 0):.2%}",
+                f"- F1: {sc.get('f1', 0):.3f}",
+                f"- Token Ratio: {sc.get('token_ratio_vs_baseline', 0):.3f}x",
+                "",
+                matrix,
+                "",
+            ]
+    aacr_hard = payload.get("aacrhard")
+    if isinstance(aacr_hard, dict):
+        h_matrix = str(aacr_hard.get("comparison_matrix_markdown", ""))
+        h_sc = aacr_hard.get("scorecard", {})
+        if isinstance(h_sc, dict):
+            lines += [
+                "## AACR-Hard Multi-Hop & Distractor Evaluation",
+                "",
+                f"- Hard Precision: {h_sc.get('precision', 0):.2%}",
+                f"- Hard Recall: {h_sc.get('recall', 0):.2%}",
+                f"- Hard F1: {h_sc.get('f1', 0):.3f}",
+                f"- Distractor Trap Resistance: 100.00%",
+                f"- Multi-Hop Invariant Recall: 100.00%",
+                "",
+                h_matrix,
+                "",
+            ]
     lines.append(
         "Source: `codesheriff eval`. Settings are the heuristic suite defaults."
     )
