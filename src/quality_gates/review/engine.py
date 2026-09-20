@@ -283,10 +283,25 @@ def run_review(
             root=root,
         )
 
+    from quality_gates.review.invariant import (
+        check_cross_file_invariants,
+        invariant_violations_to_findings,
+        validate_grounded_citations,
+    )
+
+    if llm_findings:
+        grounded_llm, _ = validate_grounded_citations(llm_findings, root)
+        llm_findings = grounded_llm
+
     llm_findings = drop_style_nits(llm_findings, allowed_paths=allowed or None)
     heuristic_kept = [item for item in heuristic if item.rule not in {"languages"}]
     findings = merge_findings(heuristic_kept, llm_findings)
     findings = drop_style_nits(findings, allowed_paths=None)
+
+    cross_file_violations = check_cross_file_invariants(root, paths, diff, config)
+    if cross_file_violations:
+        findings.extend(invariant_violations_to_findings(cross_file_violations))
+
     findings = enrich_findings(findings, root)
     from quality_gates.review.context_extra import (
         adr_conflicts,

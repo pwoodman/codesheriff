@@ -61,3 +61,6 @@ graphify-out/
 .quality-app/
 github-app/worker/.wrangler/
 github-app/worker/node_modules/
+
+# Sheriff local state
+.sheriff/
