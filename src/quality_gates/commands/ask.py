@@ -60,11 +60,16 @@ def register(sub: argparse._SubParsersAction) -> None:
     )
 
 
-def handle(args: argparse.Namespace, root: Path, config: QualityConfig) -> int | None:
+def handle(
+    args: argparse.Namespace,
+    root: Path = Path("."),
+    config: QualityConfig | None = None,
+) -> int | None:
     if getattr(args, "command", None) != "ask":
         return None
 
-    res = query_repo(root, config, args.query, limit=args.limit)
+    cfg = config or QualityConfig()
+    res = query_repo(root, cfg, args.query, limit=args.limit)
 
     if args.json:
         print(json.dumps(res, indent=2))

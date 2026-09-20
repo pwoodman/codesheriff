@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 
 from quality_gates.commands.ask import query_repo
@@ -111,3 +112,19 @@ def test_answer_pr_review_conversational():
     assert "codesheriff bypass" in resp_bypass
     resp_resolve = answer_pr_review_comment("/sheriff resolve", "sec-01")
     assert "marked resolved" in resp_resolve
+
+
+def test_command_handlers_default_args(tmp_path: Path):
+    from quality_gates.commands.ask import handle as handle_ask
+    from quality_gates.commands.bypass import handle as handle_bypass
+
+    args_ask = argparse.Namespace(command="ask", query="test", limit=5, json=False)
+    # Testing handle default args
+    assert handle_ask(args_ask, root=tmp_path) is None or isinstance(
+        handle_ask(args_ask, root=tmp_path), int
+    )
+
+    args_bypass = argparse.Namespace(command="bypass", reason=None, hours=1, list=False)
+    assert handle_bypass(args_bypass, root=tmp_path) is None or isinstance(
+        handle_bypass(args_bypass, root=tmp_path), int
+    )

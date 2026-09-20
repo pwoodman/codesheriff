@@ -85,18 +85,22 @@ def register(sub: argparse._SubParsersAction) -> None:
     )
 
 
-def handle(args: argparse.Namespace, root: Path, config: QualityConfig) -> int | None:
+def handle(
+    args: argparse.Namespace,
+    root: Path = Path("."),
+    config: QualityConfig | None = None,
+) -> int | None:
     if getattr(args, "command", None) != "bypass":
         return None
 
     entry = record_bypass(
         root=root,
-        reason=args.reason,
-        author=args.author,
-        pr=args.pr,
+        reason=getattr(args, "reason", "Emergency hotfix bypass"),
+        author=getattr(args, "author", ""),
+        pr=getattr(args, "pr", ""),
     )
 
-    if args.json:
+    if getattr(args, "json", False):
         print(json.dumps(entry, indent=2))
         return 0
 

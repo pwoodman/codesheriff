@@ -307,6 +307,12 @@ def _closed_loop_rate(tmp: Path) -> dict[str, Any]:
     }
 
 
+# Default weights for RSVI computation
+RSVI_WEIGHT_MULTI_HOP = 0.15
+RSVI_WEIGHT_1CLICK_FIX = 0.15
+RSVI_WEIGHT_FALSE_BLOCKING = 0.15
+
+
 def calculate_rsvi(
     *,
     r_crit: float,
@@ -323,9 +329,9 @@ def calculate_rsvi(
     score = 100.0 * (
         0.35 * max(0.0, min(1.0, r_crit))
         + 0.20 * (1.0 - max(0.0, min(1.0, false_positive_rate)))
-        + 0.15 * max(0.0, min(1.0, r_multi))
-        + 0.15 * max(0.0, min(1.0, a_fix))
-        + 0.15 * (1.0 - max(0.0, min(1.0, b_false)))
+        + RSVI_WEIGHT_MULTI_HOP * max(0.0, min(1.0, r_multi))
+        + RSVI_WEIGHT_1CLICK_FIX * max(0.0, min(1.0, a_fix))
+        + RSVI_WEIGHT_FALSE_BLOCKING * (1.0 - max(0.0, min(1.0, b_false)))
     )
     return {
         "rsvi": round(score, 2),
