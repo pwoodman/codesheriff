@@ -295,6 +295,7 @@ def _is_auditor_source(hit: FileHit) -> bool:
             "review/heuristic.py",
             "review/routing.py",
             "review/packs.py",
+            "review/external_eval.py",
             # The App's own credential plumbing holds an outbound GitHub App
             # JWT, which is not an authentication surface of the target repo.
             "quality_gates/github_app.py",

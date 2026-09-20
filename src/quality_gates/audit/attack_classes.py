@@ -61,7 +61,7 @@ PATTERNS = [
         re.compile(
             r"""(?i)(subprocess\.(Popen|run|call)|os\.system)\s*\([^)]*shell\s*=\s*True"""
         ),
-        "Command Injection with shell=True",
+        "Command Injection with shell=True",  # quality:ignore shell-true -- rule definition label
         "Shell execution enabled with dynamic command arguments.",
         "An attacker providing command line arguments containing metacharacters (e.g. ';', '&&', '|', '`') executes arbitrary shell commands.",  # quality:ignore shell-true -- rule definition pattern, not an executable call
         "Set shell=False and pass arguments as a validated list of strings.",

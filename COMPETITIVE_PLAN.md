@@ -197,3 +197,20 @@ Standard benchmarks test isolated single-file defects. **AACR-Hard** specificall
   - **1 architectural inquiry** surfaced in `NEEDS-VALIDATION.md` for human review.
   - **0 ungrounded hallucinations**. All references backed by exact file paths and line ranges.
 
+---
+
+## 7. Implementation & Verification of Unique Differentiators
+
+### 7.1 Implemented Enhancements
+1. **Local Semantic Architecture Querying (`codesheriff ask`)**:
+   - `src/quality_gates/commands/ask.py` enables instant, zero-egress repository queries using the local symbol graph, beating Greptile's cloud dependency.
+2. **Emergency Break-Glass Bypass (`codesheriff bypass`)**:
+   - `src/quality_gates/commands/bypass.py` and `policy.py` provide a documented, auditable mechanism (`.quality-reports/bypass.json`) to unblock production hotfixes without lowering long-term quality standards.
+3. **Conversational PR Commands & UX Partitioning**:
+   - `src/quality_gates/review/ux.py` handles conversational PR commands (`/sheriff bypass`, `/sheriff resolve`) and separates P0/P1 blockers from collapsible informational nits, avoiding developer review fatigue.
+4. **Standardized Velocity Metric (RSVI)**:
+   - `src/quality_gates/review/evalbench.py` defines the Review Signal & Velocity Index formula balancing defect recall, distractor trap resistance, multi-file invariants, and fix acceptance.
+5. **Canonical Open-Source Validation Targets**:
+   - `src/quality_gates/review/external_eval.py` targets `tiangolo/fastapi`, `trpc/trpc`, and `cli/cli` for multi-language real-world stress testing.
+
+

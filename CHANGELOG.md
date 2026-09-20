@@ -3,6 +3,14 @@
 
 
 
+
+## 1.18.0
+
+- Add local semantic search CLI command (`codesheriff ask`).
+- Add break-glass emergency bypass command and audit logging (`codesheriff bypass`).
+- Add progressive disclosure UX partitioning and conversational PR review comment helpers.
+- Add Review Signal-to-Value Index (RSVI) evaluator and external benchmark targets.
+
 ## 1.17.1
 
 - patch release.

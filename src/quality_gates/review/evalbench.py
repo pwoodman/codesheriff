@@ -305,3 +305,39 @@ def _closed_loop_rate(tmp: Path) -> dict[str, Any]:
             round(len(resolved) / len(attempted), 4) if attempted else None
         ),
     }
+
+
+# Default weights for RSVI computation
+RSVI_WEIGHT_MULTI_HOP = 0.15
+RSVI_WEIGHT_1CLICK_FIX = 0.15
+RSVI_WEIGHT_FALSE_BLOCKING = 0.15
+
+
+def calculate_rsvi(
+    *,
+    r_crit: float,
+    false_positive_rate: float,
+    r_multi: float,
+    a_fix: float,
+    b_false: float,
+) -> dict[str, float]:
+    """Calculate the Review Signal & Velocity Index (RSVI).
+
+    RSVI balances deep defect detection against developer velocity:
+    RSVI = 100 * (0.35 * R_crit + 0.20 * (1 - FP) + 0.15 * R_multi + 0.15 * A_fix + 0.15 * (1 - B_false))
+    """
+    score = 100.0 * (
+        0.35 * max(0.0, min(1.0, r_crit))
+        + 0.20 * (1.0 - max(0.0, min(1.0, false_positive_rate)))
+        + RSVI_WEIGHT_MULTI_HOP * max(0.0, min(1.0, r_multi))
+        + RSVI_WEIGHT_1CLICK_FIX * max(0.0, min(1.0, a_fix))
+        + RSVI_WEIGHT_FALSE_BLOCKING * (1.0 - max(0.0, min(1.0, b_false)))
+    )
+    return {
+        "rsvi": round(score, 2),
+        "r_crit": round(r_crit, 4),
+        "false_positive_rate": round(false_positive_rate, 4),
+        "r_multi": round(r_multi, 4),
+        "a_fix": round(a_fix, 4),
+        "b_false": round(b_false, 4),
+    }

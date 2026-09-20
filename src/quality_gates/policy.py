@@ -231,10 +231,59 @@ def write_baseline(
     return path
 
 
+def _apply_adopt_ratchet(
+    results: list[GateResult],
+    root: Path,
+    baseline: dict[str, Any] | None,
+) -> int:
+    known = {str(item) for item in (baseline or {}).get("fingerprints") or []}
+    base_cov = baseline.get("coverage_line") if baseline else None
+    current_cov = _coverage_percent(root)
+    new_count = 0
+    identities = {id(item): identity for item, identity in _error_identities(results)}
+    for result in results:
+        if result.name == "coverage":
+            new_count += _adopt_coverage(result, current_cov, base_cov)
+            continue
+        if result.name == "test":
+            new_count += result.error_count()
+            continue
+        if result.status != "fail":
+            continue
+        kept = 0
+        for item in result.findings:
+            if item.severity != "error":
+                continue
+            if identities.get(id(item), fingerprint(item)) in known:
+                item.severity = "warning"
+                if not item.message.startswith("[grandfathered]"):
+                    item.message = f"[grandfathered] {item.message}"
+            else:
+                kept += 1
+        if kept == 0:
+            result.status = "pass"
+            result.notes.append(
+                "policy=adopt: existing findings grandfathered vs the baseline file"
+            )
+        else:
+            result.notes.append(f"policy=adopt: {kept} new finding(s) vs baseline")
+            new_count += kept
+    return new_count
+
+
 def apply_policy(
     results: list[GateResult], root: Path, config: QualityConfig
 ) -> tuple[list[GateResult], str]:
+    from quality_gates.commands.bypass import is_bypass_active
     from quality_gates.ignore import apply_ignores
+
+    # Emergency bypass check: if authorized, demote failures with audit trail notice
+    if is_bypass_active(root):
+        _demote_failures(
+            results,
+            "emergency bypass active: non-critical gate failures waived with audit trail",
+        )
+        return results, "bypass"
 
     apply_ignores(results, root)
     _apply_exceptions(results, config)
@@ -268,40 +317,7 @@ def apply_policy(
         _demote_failures(results, reason)
         return results, policy
 
-    known = {str(item) for item in (baseline or {}).get("fingerprints") or []}
-    base_cov = baseline.get("coverage_line") if baseline else None
-    current_cov = _coverage_percent(root)
-    new_count = 0
-    identities = {id(item): identity for item, identity in _error_identities(results)}
-    for result in results:
-        if result.name == "coverage":
-            new_count += _adopt_coverage(result, current_cov, base_cov)
-            continue
-        if result.name == "test":
-            # Legacy adoption may grandfather attributable static debt, never a
-            # fresh failed or incomplete execution result.
-            new_count += result.error_count()
-            continue
-        if result.status != "fail":
-            continue
-        kept = 0
-        for item in result.findings:
-            if item.severity != "error":
-                continue
-            if identities.get(id(item), fingerprint(item)) in known:
-                item.severity = "warning"
-                if not item.message.startswith("[grandfathered]"):
-                    item.message = f"[grandfathered] {item.message}"
-            else:
-                kept += 1
-        if kept == 0:
-            result.status = "pass"
-            result.notes.append(
-                "policy=adopt: existing findings grandfathered vs the baseline file"
-            )
-        else:
-            result.notes.append(f"policy=adopt: {kept} new finding(s) vs baseline")
-            new_count += kept
+    new_count = _apply_adopt_ratchet(results, root, baseline)
     if new_count == 0:
         results[0].notes.append(
             "policy=adopt: no new blocking issues vs baseline (coverage ratchet + fingerprints)"
