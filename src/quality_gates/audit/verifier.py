@@ -35,11 +35,10 @@ def _is_static_rule_or_comment(line_str: str) -> bool:
     # Check for regex compilation or rule dictionary declarations
     if any(k in stripped for k in ["re.compile(", '"pattern":', "'pattern':"]):
         return True
-    if any(re_sym in stripped for re_sym in [r"\\s*", r"\s*", r"\.", r"\\."]) and any(
-        kw in stripped for kw in ["r'", 'r"', 're.compile']
-    ):
-        return True
-    return False
+    return bool(
+        any(re_sym in stripped for re_sym in [r"\\s*", r"\s*", r"\.", r"\\."])
+        and any(kw in stripped for kw in ["r'", 'r"', "re.compile"])
+    )
 
 
 def _check_sanitization(
@@ -117,7 +116,9 @@ def evaluate_adversarial_disprover(
         )
 
     doc_exts = {".md", ".rst", ".txt", ".adoc", ".markdown"}
-    if target_file.suffix.lower() in doc_exts and candidate.attack_class_id not in {"AC-09"}:
+    if target_file.suffix.lower() in doc_exts and candidate.attack_class_id not in {
+        "AC-09"
+    }:
         return VerifiedFinding(
             candidate=candidate,
             verdict="REJECTED",
@@ -134,7 +135,10 @@ def evaluate_adversarial_disprover(
             disproof_reason="Candidate line is inside a regex definition, rule dictionary, or comment; not an executable sink.",
             grounded=True,
         )
-    if any(k in matched_line for k in ['"message":', "'message':", '"desc":', "'description':"]):
+    if any(
+        k in matched_line
+        for k in ['"message":', "'message':", '"desc":', "'description':"]
+    ):
         return VerifiedFinding(
             candidate=candidate,
             verdict="REJECTED",

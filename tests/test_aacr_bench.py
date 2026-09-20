@@ -181,4 +181,3 @@ def test_run_aacr_hard_evaluation(tmp_path: Path) -> None:
     md = render_hard_comparison_markdown()
     assert "Hard Precision" in md
     assert "Distractor Trap Resistance" in md
-

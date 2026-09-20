@@ -63,7 +63,7 @@ PATTERNS = [
         ),
         "Command Injection with shell=True",
         "Shell execution enabled with dynamic command arguments.",
-        "An attacker providing command line arguments containing metacharacters (e.g. ';', '&&', '|', '`') executes arbitrary shell commands.",
+        "An attacker providing command line arguments containing metacharacters (e.g. ';', '&&', '|', '`') executes arbitrary shell commands.",  # quality:ignore shell-true -- rule definition pattern, not an executable call
         "Set shell=False and pass arguments as a validated list of strings.",
     ),
     # AC-04: Cryptographic Flaws & Insecure Randomness

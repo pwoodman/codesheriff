@@ -23,32 +23,24 @@ def prune_python_ast(code: str, retain_lines: set[int] | list[int]) -> str:
     except SyntaxError:
         return code
 
+    def _prune_function(node: ast.stmt) -> ast.AST:
+        end_line = getattr(node, "end_lineno", node.lineno)
+        overlaps = any(node.lineno <= line <= end_line for line in lines_set)
+        if not overlaps and len(node.body) > 1:  # type: ignore[attr-defined]
+            stub = ast.Expr(value=ast.Constant(value=Ellipsis))
+            doc = ast.get_docstring(node)  # type: ignore[arg-type]
+            if doc:
+                node.body = [ast.Expr(value=ast.Constant(value=doc)), stub]  # type: ignore[attr-defined]
+            else:
+                node.body = [stub]  # type: ignore[attr-defined]
+        return node
+
     class BodyPruner(ast.NodeTransformer):
         def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
-            self.generic_visit(node)
-            end_line = getattr(node, "end_lineno", node.lineno)
-            overlaps = any(node.lineno <= line <= end_line for line in lines_set)
-            if not overlaps and len(node.body) > 1:
-                stub = ast.Expr(value=ast.Constant(value=Ellipsis))
-                doc = ast.get_docstring(node)
-                if doc:
-                    node.body = [ast.Expr(value=ast.Constant(value=doc)), stub]
-                else:
-                    node.body = [stub]
-            return node
+            return _prune_function(node)
 
         def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AST:
-            self.generic_visit(node)
-            end_line = getattr(node, "end_lineno", node.lineno)
-            overlaps = any(node.lineno <= line <= end_line for line in lines_set)
-            if not overlaps and len(node.body) > 1:
-                stub = ast.Expr(value=ast.Constant(value=Ellipsis))
-                doc = ast.get_docstring(node)
-                if doc:
-                    node.body = [ast.Expr(value=ast.Constant(value=doc)), stub]
-                else:
-                    node.body = [stub]
-            return node
+            return _prune_function(node)
 
     new_tree = BodyPruner().visit(tree)
     ast.fix_missing_locations(new_tree)

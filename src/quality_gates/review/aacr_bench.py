@@ -237,6 +237,15 @@ COMPETITOR_BENCHMARK_PROFILES: dict[str, dict[str, Any]] = {
 }
 
 
+def _markdown_table(headers: list[str], rows: list[list[str]]) -> str:
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join(["---"] * len(headers)) + " |",
+    ]
+    lines.extend("| " + " | ".join(row) + " |" for row in rows)
+    return "\n".join(lines)
+
+
 def render_competitor_comparison_markdown(
     sheriff_scorecard: AACRScorecard | None = None,
 ) -> str:
@@ -264,29 +273,26 @@ def render_competitor_comparison_markdown(
         "Pre-Commit Loop",
     ]
 
-    lines = [
-        "| " + " | ".join(headers) + " |",
-        "| " + " | ".join(["---"] * len(headers)) + " |",
-    ]
-
+    rows = []
     for name, p in profiles.items():
-        row = [
-            f"**{name}**" if name == "The Code Sheriff" else name,
-            f"{p['precision']:.2%}",
-            f"{p['recall']:.2%}",
-            f"{p['f1']:.3f}",
-            f"{p['token_ratio']:.3f}x",
-            "✅" if p["scan_whole_repo"] else "❌",
-            "✅" if p["coverage_ledger"] else "❌",
-            "✅" if p["adversarial_disprover"] else "❌",
-            "✅" if p["mermaid_diagrams"] else "❌",
-            "✅" if p["transactional_fixes"] else "❌",
-            "✅" if p["cross_file_invariants"] else "❌",
-            "✅" if p["pre_commit_agent_loop"] else "❌",
-        ]
-        lines.append("| " + " | ".join(row) + " |")
+        rows.append(
+            [
+                f"**{name}**" if name == "The Code Sheriff" else name,
+                f"{p['precision']:.2%}",
+                f"{p['recall']:.2%}",
+                f"{p['f1']:.3f}",
+                f"{p['token_ratio']:.3f}x",
+                "✅" if p["scan_whole_repo"] else "❌",
+                "✅" if p["coverage_ledger"] else "❌",
+                "✅" if p["adversarial_disprover"] else "❌",
+                "✅" if p["mermaid_diagrams"] else "❌",
+                "✅" if p["transactional_fixes"] else "❌",
+                "✅" if p["cross_file_invariants"] else "❌",
+                "✅" if p["pre_commit_agent_loop"] else "❌",
+            ]
+        )
 
-    return "\n".join(lines)
+    return _markdown_table(headers, rows)
 
 
 def get_canonical_aacr_suite() -> list[AACRCase]:
@@ -299,8 +305,8 @@ def get_canonical_aacr_suite() -> list[AACRCase]:
             language="python",
             diff=(
                 "@@ -20,4 +20,4 @@\n"
-                "-    cursor.execute(\"SEL\" + \"ECT id FROM users WHERE email = %s\", (email,))\n"
-                "+    cursor.execute(f\"SEL\" + \"ECT id FROM users WHERE email = '{email}'\")\n"
+                '-    cursor.execute("SEL" + "ECT id FROM users WHERE email = %s", (email,))\n'
+                '+    cursor.execute(f"SEL" + "ECT id FROM users WHERE email = \'{email}\'")\n'
             ),
             ground_truth=[
                 AACRIssue(
@@ -344,9 +350,9 @@ def get_canonical_aacr_suite() -> list[AACRCase]:
             language="python",
             diff=(
                 "@@ -12,2 +12,2 @@\n"
-                "-    subprocess.run([\"tar\", \"-xzf\", archive_path], check=True)\n"
+                '-    subprocess.run(["tar", "-xzf", archive_path], check=True)\n'
                 "+    sub"
-                "process.Popen(f\"tar -xzf {archive_path}\", sh"
+                'process.Popen(f"tar -xzf {archive_path}", sh'
                 "ell=True)\n"
             ),
             ground_truth=[
@@ -563,26 +569,24 @@ def render_hard_comparison_markdown(
         "Distractor Trap Resistance (FP immunity)",
         "Multi-Hop Invariant Recall",
     ]
-    lines = [
-        "| " + " | ".join(headers) + " |",
-        "| " + " | ".join(["---"] * len(headers)) + " |",
-    ]
+    rows = []
     for name, p in profiles.items():
-        row = [
-            f"**{name}**" if name == "The Code Sheriff" else name,
-            f"{p['precision']:.2%}",
-            f"{p['recall']:.2%}",
-            f"{p['f1']:.3f}",
-            f"{p['token_ratio']:.3f}x",
-            f"{p['distractor_resistance']:.2%}",
-            f"{p['multi_hop_recall']:.2%}",
-        ]
-        lines.append("| " + " | ".join(row) + " |")
-    return "\n".join(lines)
+        rows.append(
+            [
+                f"**{name}**" if name == "The Code Sheriff" else name,
+                f"{p['precision']:.2%}",
+                f"{p['recall']:.2%}",
+                f"{p['f1']:.3f}",
+                f"{p['token_ratio']:.3f}x",
+                f"{p['distractor_resistance']:.2%}",
+                f"{p['multi_hop_recall']:.2%}",
+            ]
+        )
+    return _markdown_table(headers, rows)
 
 
 def get_hard_aacr_suite() -> list[AACRCase]:
-    """AACR-Hard benchmark suite: multi-hop cross-file invariants, adversarial distractor traps, and subtle exploits."""
+    """AACR-Hard benchmark suite: multi-hop cross-file invariants, adversarial distractor traps, and subtle exploits."""  # codesheriff: benchmark fixture (synthetic diff text, not a real credential)
     return [
         AACRCase(
             case_id="aacr-hard-multi-hop-auth",
@@ -603,7 +607,13 @@ def get_hard_aacr_suite() -> list[AACRCase]:
                     category="cross-file-invariant",
                     severity="error",
                     description="Multi-hop caller workers/sync_worker.py fails due to un-updated signature",
-                    needles=["signature", "tenant_id", "sync_worker", "invariant", "parameter"],
+                    needles=[
+                        "signature",
+                        "tenant_id",
+                        "sync_worker",
+                        "invariant",
+                        "parameter",
+                    ],
                 )
             ],
         ),
@@ -614,9 +624,9 @@ def get_hard_aacr_suite() -> list[AACRCase]:
             language="python",
             diff=(
                 "@@ -15,4 +15,4 @@\n"
-                "-    cursor.execute(\"SEL\" + \"ECT id FROM events WHERE id = %s\", (event_id,))\n"
+                '-    cursor.execute("SEL" + "ECT id FROM events WHERE id = %s", (event_id,))\n'
                 "+    prefix = '/* trace */ ' + 'TAG: '\n"
-                "+    cursor.execute(prefix + \"SEL\" + \"ECT id FROM events WHERE id = %s\", (event_id,))\n"
+                '+    cursor.execute(prefix + "SEL" + "ECT id FROM events WHERE id = %s", (event_id,))\n'
             ),
             ground_truth=[],  # Distractor trap: safe parameterized query with constant prefix
         ),
@@ -627,7 +637,7 @@ def get_hard_aacr_suite() -> list[AACRCase]:
             language="python",
             diff=(
                 "@@ -8,2 +8,2 @@\n"
-                "+    PATTERNS = [(re.compile(r\"pic\" + \"kle\\.loads\\s*\\(\"), \"CWE-502\")]\n"
+                '+    PATTERNS = [(re.compile(r"pic" + "kle\\.loads\\s*\\("), "CWE-502")]\n'
             ),
             ground_truth=[],  # Distractor trap: rule definition matching pickle.loads, not a sink
         ),
@@ -787,4 +797,3 @@ def run_aacr_hard_evaluation(root: Path | None = None) -> dict[str, Any]:
         "scorecard": scorecard.to_dict(),
         "comparison_matrix_markdown": comparison_md,
     }
-
