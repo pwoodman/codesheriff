@@ -191,3 +191,38 @@ def _tokens(text: str) -> set[str]:
         for part in text.replace("/", " ").replace(".", " ").split()
         if part
     }
+
+
+BENCHMARK_TARGET_REPOS = [
+    {
+        "repo": "tiangolo/fastapi",
+        "language": "python",
+        "description": "High-performance async web framework validating schema drift & un-diffed route dependencies",
+        "test_vectors": [
+            "schema_break",
+            "async_race_condition",
+            "dependency_injection_mismatch",
+        ],
+    },
+    {
+        "repo": "trpc/trpc",
+        "language": "typescript",
+        "description": "End-to-end typesafe APIs validating multi-hop procedure contract changes",
+        "test_vectors": ["multi_hop_procedure_drift", "consumer_signature_mismatch"],
+    },
+    {
+        "repo": "cli/cli",
+        "language": "go",
+        "description": "GitHub official CLI validating concurrent goroutines, errors, and cross-package regresssions",
+        "test_vectors": [
+            "goroutine_leak",
+            "context_cancellation_race",
+            "command_flag_drift",
+        ],
+    },
+]
+
+
+def target_benchmark_repositories() -> list[dict[str, Any]]:
+    """Return the 3 canonical open-source repositories used for empirical validation and performance benchmarks."""
+    return list(BENCHMARK_TARGET_REPOS)

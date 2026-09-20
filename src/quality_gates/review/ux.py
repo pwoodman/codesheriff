@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from quality_gates.models import Finding
 
 ReviewTone = Literal["assertive", "collaborative", "educational"]
 
@@ -105,7 +108,50 @@ def answer_pr_review_comment(
             f"`ignore_rules` in `quality.toml`."
         )
 
+    if any(q in lower for q in ["/sheriff bypass", "bypass"]):
+        return (
+            "To authorize an emergency bypass for urgent production incidents, run:\n"
+            "`codesheriff bypass --reason '<incident justification>'` or add label `sheriff:bypass`.\n"
+            "This waives non-critical checks while logging a full compliance audit entry in `.quality-reports/bypass.json`."
+        )
+
+    if any(q in lower for q in ["/sheriff resolve", "resolve"]):
+        return (
+            f"Review thread marked resolved for rule `{finding_rule}`. The quality gate will re-verify "
+            f"code invariant integrity upon next commit."
+        )
+
     return (
         f"Regarding rule `{finding_rule}`: The goal is to keep code reliability high. "
         f"If the current implementation is intentional, feel free to add a brief comment or test covering this edge case."
     )
+
+
+def partition_findings_for_ux(
+    findings: list[Finding],
+) -> tuple[list[Finding], list[Finding]]:
+    """Partition findings into high-signal blockers (P0/P1) vs collapsible non-blocking feedback (P2/P3).
+
+    Eliminates CodeRabbit's 'comment fatigue' while ensuring developers are never blocked by nits.
+    """
+    blockers: list[Finding] = []
+    collapsed: list[Finding] = []
+
+    for f in findings:
+        # P0 / P1: error severity, critical/high security, or broken contracts
+        if (
+            f.severity == "error"
+            or getattr(f, "cwe", None)
+            or (
+                f.rule
+                and any(
+                    kw in f.rule.lower()
+                    for kw in ["invariant", "security", "contract", "cwe", "owasp"]
+                )
+            )
+        ):
+            blockers.append(f)
+        else:
+            collapsed.append(f)
+
+    return blockers, collapsed

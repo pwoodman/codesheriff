@@ -234,7 +234,16 @@ def write_baseline(
 def apply_policy(
     results: list[GateResult], root: Path, config: QualityConfig
 ) -> tuple[list[GateResult], str]:
+    from quality_gates.commands.bypass import is_bypass_active
     from quality_gates.ignore import apply_ignores
+
+    # Emergency bypass check: if authorized, demote failures with audit trail notice
+    if is_bypass_active(root):
+        _demote_failures(
+            results,
+            "emergency bypass active: non-critical gate failures waived with audit trail",
+        )
+        return results, "bypass"
 
     apply_ignores(results, root)
     _apply_exceptions(results, config)
