@@ -168,6 +168,13 @@ automatic = true
 drafts = false
 confidence = "balanced"
 named_mode = "standard"
+# P0 review knobs: confidence floor per finding (0.0-1.0, default 0.5).
+# quiet >= 0.8 | standard >= 0.5 | strict >= 0.2
+strictness = "standard"
+# Minimum severity that fails when `review` is in quality.fail_on.
+fail_severity = "error"
+# Finding labels/rules to ignore (e.g. ["large-pr"]).
+ignore_labels = []
 
 [quality.test]
 require_for_source = true

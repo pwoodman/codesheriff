@@ -19,6 +19,29 @@ def verify_command(finding: Finding) -> str:
     return f"quality {gate}"
 
 
+def _payload_confidence(finding: Finding) -> float:
+    value = getattr(finding, "confidence", 0.5)
+    if value is None or value == "":
+        return 0.5
+    if isinstance(value, bool):
+        return 0.5
+    if isinstance(value, (int, float)):
+        try:
+            return max(0.0, min(1.0, float(value)))
+        except (TypeError, ValueError):
+            return 0.5
+    text = str(value).strip()
+    if not text:
+        return 0.5
+    labels = {"HIGH": 0.9, "MEDIUM": 0.6, "LOW": 0.3}
+    if text.upper() in labels:
+        return labels[text.upper()]
+    try:
+        return max(0.0, min(1.0, float(text)))
+    except (TypeError, ValueError):
+        return 0.5
+
+
 def finding_payload(finding: Finding) -> dict[str, Any]:
     loc = pointer(finding)
     payload: dict[str, Any] = {
@@ -28,6 +51,7 @@ def finding_payload(finding: Finding) -> dict[str, Any]:
         "message": finding.message,
         "location": loc,
         "verify": verify_command(finding),
+        "confidence": _payload_confidence(finding),
     }
     for key in (
         "path",
@@ -41,7 +65,6 @@ def finding_payload(finding: Finding) -> dict[str, Any]:
         "documentation_url",
         "snippet",
         "patch",
-        "confidence",
         "cwe",
         "owasp",
         "epss",

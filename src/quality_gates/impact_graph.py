@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 from collections import defaultdict, deque
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -94,6 +95,210 @@ def is_test(path: str) -> bool:
         return True
     parts = posix.split("/")
     return "tests" in parts or "test" in parts or "__tests__" in parts
+
+
+GRAPH_CACHE_NAME = "graph.json"
+GRAPH_CACHE_VERSION = 1
+
+
+def _impact_cache_enabled(config: QualityConfig | None) -> bool:
+    if config is None:
+        return True
+    direct = getattr(config, "impact_cache", None)
+    if direct is not None:
+        if isinstance(direct, bool):
+            return direct
+        if isinstance(direct, str):
+            return direct.strip().lower() not in {"0", "false", "no", "off"}
+        return bool(direct)
+    try:
+        raw = getattr(config, "raw", None)
+        if isinstance(raw, dict):
+            quality = raw.get("quality")
+            if isinstance(quality, dict):
+                impact = quality.get("impact")
+                if isinstance(impact, dict) and "cache" in impact:
+                    value = impact["cache"]
+                    if isinstance(value, bool):
+                        return value
+                    if isinstance(value, str):
+                        return value.strip().lower() not in {
+                            "0",
+                            "false",
+                            "no",
+                            "off",
+                        }
+                    return bool(value)
+    except (AttributeError, TypeError):
+        pass
+    return True
+
+
+def _graph_cache_path(root: Path) -> Path:
+    return root / ".quality-reports" / GRAPH_CACHE_NAME
+
+
+def _git_head(root: Path) -> str | None:
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (OSError, ValueError):
+        pass
+    except Exception:
+        pass
+    return None
+
+
+def _snapshot_mtime(root: Path, config: QualityConfig | None) -> float:
+    latest = 0.0
+    try:
+        if config is not None:
+            for path in iter_project_files(root, config):
+                if path.suffix.lower() not in SOURCE_SUFFIXES:
+                    continue
+                try:
+                    mtime = path.stat().st_mtime
+                except OSError:
+                    continue
+                if mtime > latest:
+                    latest = mtime
+        else:
+            for suffix in SOURCE_SUFFIXES:
+                for path in root.rglob(f"*{suffix}"):
+                    try:
+                        if path.is_file():
+                            latest = max(latest, path.stat().st_mtime)
+                    except OSError:
+                        continue
+    except (OSError, ValueError):
+        pass
+    except Exception:
+        pass
+    return latest
+
+
+def load_cached_graph(
+    root: Path, config: QualityConfig | None = None
+) -> ImportGraph | None:
+    """Return the cached import graph when HEAD + mtime still match, else None.
+
+    Never raises: any IO/parse/mismatch yields a cache miss. Returns None when
+    caching is disabled via ``[quality.impact] cache = false``.
+    """
+    if config is not None and not _impact_cache_enabled(config):
+        return None
+    path = _graph_cache_path(root)
+    try:
+        if not path.is_file():
+            return None
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    try:
+        stored_head = payload.get("head")
+        stored_mtime = float(payload.get("mtime", 0.0) or 0.0)
+        current_head = _git_head(root)
+        # Only invalidate on HEAD when both sides are known; missing .git
+        # must not break (fall back to mtime comparison).
+        if stored_head and current_head and stored_head != current_head:
+            return None
+        current_mtime = _snapshot_mtime(root, config)
+        if current_mtime > stored_mtime + 1e-6:
+            return None
+        files = payload.get("files", [])
+        imports = payload.get("imports", {})
+        imported_by = payload.get("imported_by", {})
+        broken = payload.get("broken", {})
+        graph = ImportGraph()
+        graph.files = set(files) if isinstance(files, list) else set()
+        if isinstance(imports, dict):
+            for key, values in imports.items():
+                graph.imports[str(key)] = set(map(str, values or []))
+        if isinstance(imported_by, dict):
+            for key, values in imported_by.items():
+                graph.imported_by[str(key)] = set(map(str, values or []))
+        if isinstance(broken, dict):
+            for key, values in broken.items():
+                graph.broken[str(key)] = list(map(str, values or []))
+        for _attr in ("file_hashes", "symbols", "callers", "inheritance"):
+            stored = payload.get(_attr, {})
+            if isinstance(stored, dict):
+                getattr(graph, _attr).update(
+                    {str(k): set(map(str, v or [])) for k, v in stored.items()}
+                )
+        for _attr in ("confidence",):
+            stored = payload.get(_attr, {})
+            if isinstance(stored, dict):
+                getattr(graph, _attr).update(
+                    {str(k): str(v) for k, v in stored.items()}
+                )
+        for _attr in ("deleted_edges",):
+            stored = payload.get(_attr, {})
+            if isinstance(stored, dict):
+                getattr(graph, _attr).update(
+                    {str(k): set(map(str, v or [])) for k, v in stored.items()}
+                )
+        return graph
+    except (OSError, ValueError, TypeError, AttributeError):
+        return None
+
+
+def save_cached_graph(
+    root: Path, graph: ImportGraph, config: QualityConfig | None = None
+) -> Path | None:
+    """Persist *graph* to ``.quality-reports/graph.json`` keyed by HEAD+mtime.
+
+    No-op (returns None) when caching is disabled. Never raises.
+    """
+    if config is not None and not _impact_cache_enabled(config):
+        return None
+    try:
+        out = _graph_cache_path(root)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "version": GRAPH_CACHE_VERSION,
+            "head": _git_head(root),
+            "mtime": _snapshot_mtime(root, config),
+            "files": sorted(graph.files),
+            "imports": {key: sorted(values) for key, values in graph.imports.items()},
+            "imported_by": {
+                key: sorted(values) for key, values in graph.imported_by.items()
+            },
+            "broken": {key: list(values) for key, values in graph.broken.items()},
+            "file_hashes": dict(getattr(graph, "file_hashes", {}) or {}),
+            "symbols": {
+                key: sorted(values)
+                for key, values in getattr(graph, "symbols", {}).items()
+            },
+            "callers": {
+                key: sorted(values)
+                for key, values in getattr(graph, "callers", {}).items()
+            },
+            "inheritance": {
+                key: sorted(values)
+                for key, values in getattr(graph, "inheritance", {}).items()
+            },
+            "confidence": dict(getattr(graph, "confidence", {}) or {}),
+            "deleted_edges": {
+                key: sorted(values)
+                for key, values in getattr(graph, "deleted_edges", {}).items()
+            },
+        }
+        out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        return out
+    except (OSError, ValueError, TypeError):
+        return None
 
 
 def _python_symbols_and_relations(text: str) -> tuple[set[str], set[str], set[str]]:
@@ -278,7 +483,16 @@ def _save_graph(root: Path, graph: ImportGraph) -> None:
         return
 
 
-def build_graph(root: Path, config: QualityConfig) -> ImportGraph:
+def build_graph(
+    root: Path, config: QualityConfig, *, use_cache: bool = True
+) -> ImportGraph:
+    if use_cache and _impact_cache_enabled(config):
+        try:
+            cached = load_cached_graph(root, config)
+        except (OSError, ValueError):
+            cached = None
+        if cached is not None:
+            return cached
     aliases = config.ui_path_aliases
     index = _file_index(root, config)
     cached = _load_graph(root)
@@ -405,6 +619,9 @@ def build_graph(root: Path, config: QualityConfig) -> ImportGraph:
             graph.imported_by[target].add(rel)
 
     _save_graph(root, graph)
+    if use_cache and _impact_cache_enabled(config):
+        with suppress(OSError, ValueError):
+            save_cached_graph(root, graph, config)
     return graph
 
 

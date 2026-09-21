@@ -35,7 +35,12 @@ from quality_gates.review.incremental import (
 from quality_gates.review.ledger import update_ledger
 from quality_gates.review.llm import resolve_client, run_llm_review, validate_findings
 from quality_gates.review.neighbors import function_windows
-from quality_gates.review.parse import drop_style_nits, fingerprint, merge_findings
+from quality_gates.review.parse import (
+    drop_style_nits,
+    filter_by_confidence,
+    fingerprint,
+    merge_findings,
+)
 from quality_gates.review.resolve import resolution_stats, rotate_previous
 from quality_gates.review.routing import (
     classify_review_risk,
@@ -51,6 +56,31 @@ keep functions one-job, extract deep nests, name literals, never swallow errors.
 KISS over clever. Prefer a test over a comment that restates the name.
 """.strip()
 
+PAUSED_FLAG = "sheriff-paused"
+
+
+def is_paused(root: Path) -> bool:
+    return (root / ".quality-reports" / PAUSED_FLAG).is_file()
+
+
+def compute_effort(n_files: int, n_blockers: int) -> int:
+    """Review effort on a 1-5 scale.
+
+    Formula: Effort = 1 + min(4, files // 3 + blockers), where ``files`` is
+    the number of changed files and ``blockers`` is the number of
+    severity == error findings.
+    """
+
+    try:
+        files = max(0, int(n_files))
+    except (TypeError, ValueError):
+        files = 0
+    try:
+        blockers = max(0, int(n_blockers))
+    except (TypeError, ValueError):
+        blockers = 0
+    return 1 + min(4, files // 3 + blockers)
+
 
 def run_review(
     root: Path,
@@ -61,7 +91,14 @@ def run_review(
     post: bool,
     prior: list[GateResult] | None = None,
     manifest: ChangeManifest | None = None,
+    full: bool = False,
 ) -> GateResult:
+    if is_paused(root):
+        return GateResult(
+            name="review",
+            status="skip",
+            notes=["sheriff paused (.quality-reports/sheriff-paused present)"],
+        )
     command = os.environ.get("QUALITY_REVIEW_COMMAND") or ""
     focus = os.environ.get("QUALITY_REVIEW_FOCUS") or ""
     argument = os.environ.get("QUALITY_REVIEW_ARGUMENT") or ""
@@ -112,7 +149,7 @@ def run_review(
             manifest.diff, config.max_diff_bytes
         )
     else:
-        raw_diff = collect_diff(root, base, config.max_diff_bytes)
+        raw_diff = collect_diff(root, None if full else base, config.max_diff_bytes)
         diff, reviewed_units, unreviewed_units = partition_review_units(
             raw_diff, config.max_diff_bytes
         )
@@ -293,10 +330,16 @@ def run_review(
         grounded_llm, _ = validate_grounded_citations(llm_findings, root)
         llm_findings = grounded_llm
 
-    llm_findings = drop_style_nits(llm_findings, allowed_paths=allowed or None)
+    if full:
+        # Full review vs incremental: do not restrict to changed paths.
+        llm_findings = drop_style_nits(llm_findings, allowed_paths=None)
+    else:
+        llm_findings = drop_style_nits(llm_findings, allowed_paths=allowed or None)
     heuristic_kept = [item for item in heuristic if item.rule not in {"languages"}]
     findings = merge_findings(heuristic_kept, llm_findings)
     findings = drop_style_nits(findings, allowed_paths=None)
+    strictness = getattr(config, "review_strictness", "standard") or "standard"
+    findings = filter_by_confidence(findings, strictness)
 
     cross_file_violations = check_cross_file_invariants(root, paths, diff, config)
     if cross_file_violations:
@@ -336,6 +379,8 @@ def run_review(
     previous = rotate_previous(report_dir)
     resolution = resolution_stats(previous, findings)
     ledger = update_ledger(root, findings)
+    blockers = sum(1 for item in findings if item.severity == "error")
+    effort = compute_effort(len(paths), blockers)
     payload = {
         "schema_version": "1.0.0",
         "provider": provider,
@@ -351,6 +396,9 @@ def run_review(
         "resolution": resolution,
         "findings": [finding_payload(item) for item in findings],
         "evidence": evidence or None,
+        "strictness": strictness,
+        "effort": effort,
+        "files": paths,
         "completeness": "partial" if partial else "complete",
         "reviewed_units": reviewed_units,
         "unreviewed_units": unreviewed_units,
@@ -431,6 +479,9 @@ def run_review(
         languages=languages,
         resolution=resolution,
         rules=len(rules),
+        files=paths,
+        related=[path for path, _text in related],
+        effort=effort,
     )
     (report_dir / "review.md").write_text(body, encoding="utf-8")
     notes = [
@@ -523,6 +574,29 @@ def run_review(
     )
 
 
+def _bullet_confidence(item: Finding) -> float:
+    value = getattr(item, "confidence", 0.5)
+    if value is None or value == "":
+        return 0.5
+    if isinstance(value, bool):
+        return 0.5
+    if isinstance(value, (int, float)):
+        try:
+            return max(0.0, min(1.0, float(value)))
+        except (TypeError, ValueError):
+            return 0.5
+    text = str(value).strip()
+    if not text:
+        return 0.5
+    labels = {"HIGH": 0.9, "MEDIUM": 0.6, "LOW": 0.3}
+    if text.upper() in labels:
+        return labels[text.upper()]
+    try:
+        return max(0.0, min(1.0, float(text)))
+    except (TypeError, ValueError):
+        return 0.5
+
+
 def render_review(
     findings: list[Finding],
     *,
@@ -531,12 +605,33 @@ def render_review(
     languages: list[str],
     resolution: dict[str, object],
     rules: int,
+    files: list[str] | None = None,
+    related: list[str] | None = None,
+    effort: int | None = None,
 ) -> str:
+    files = list(files or [])
+    related = list(related or [])
+    blockers_all = [item for item in findings if item.severity == "error"]
+    if effort is None:
+        effort = compute_effort(len(files), len(blockers_all))
     lines = [
         "## AI code review",
         "",
         f"Provider: `{provider}` · languages: `{', '.join(languages) or 'none'}`"
         f" · rules: `{rules}`",
+        "",
+        "## Walkthrough",
+        "",
+        f"Summary: {(summary.strip() if summary else '_no summary_')}",
+        "",
+        f"Effort: `{effort}/5`",
+        "",
+        f"Files: `{', '.join(files[:20]) if files else 'none'}`",
+        "",
+        f"Related: `{', '.join(related[:20]) if related else 'none'}`",
+        "",
+        "<details>",
+        "<summary>Findings detail</summary>",
         "",
     ]
     rate = resolution.get("rate")
@@ -551,7 +646,7 @@ def render_review(
         )
     if summary:
         lines.extend([summary.strip(), ""])
-    blockers = [item for item in findings if item.severity == "error"]
+    blockers = blockers_all
     warnings = [item for item in findings if item.severity == "warning"]
     infos = [item for item in findings if item.severity == "info"]
     if blockers:
@@ -579,9 +674,10 @@ def render_review(
     lines.extend(
         [
             "",
-            "Fix with `codesheriff oracle --run --prompt`, or send one finding to an "
-            "agent via MCP `codesheriff_finding_context`. Re-run `codesheriff oracle --run` "
-            "until green.",
+            "</details>",
+            "",
+            "Fix with `/sheriff fix` or `codesheriff oracle --run --prompt`. Re-run "
+            "`/sheriff oracle` until green.",
             "",
         ]
     )
@@ -600,7 +696,8 @@ def _bullets(items: list[Finding]) -> list[str]:
         verify = f" (verify: `{item.verify}`)" if item.verify else ""
         labels = [part for part in (item.owasp, item.cwe) if part]
         tax = f" ({' · '.join(labels)})" if labels else ""
-        lines.append(f"- `{loc}` {item.message}{tax}{extra}{verify}")
+        conf = f" (confidence: `{_bullet_confidence(item):.2f}`)"
+        lines.append(f"- `{loc}` {item.message}{tax}{extra}{verify}{conf}")
     return lines
 
 

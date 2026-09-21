@@ -254,6 +254,13 @@ def run_llm_review(
     diff: str,
 ) -> tuple[str, list[Finding], str]:
     mode = (mode or "auto").lower()
+    try:
+        is_light = bool(getattr(config, "light", False))
+    except (AttributeError, TypeError):
+        is_light = False
+    if is_light:
+        # Light mode passthrough: skip ensemble/agentic cost, do a single pass.
+        mode = "single"
     if mode == "auto":
         mode = "agentic"
     try:

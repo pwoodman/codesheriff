@@ -292,6 +292,64 @@ def _fnmatch(path: str, glob: str) -> bool:
     return fnmatch.fnmatch(path, glob) or fnmatch.fnmatch(Path(path).name, glob)
 
 
+_OVERRIDE_FENCE = re.compile(
+    r"```\s*quality-override\b[^\n]*\n(.*?)```", re.DOTALL | re.IGNORECASE
+)
+
+
+def _override_value(raw: str) -> object:
+    text = raw.strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in {"'", '"'}:
+        return text[1:-1]
+    lowered = text.lower()
+    if lowered in {"true", "yes", "on"}:
+        return True
+    if lowered in {"false", "no", "off"}:
+        return False
+    try:
+        return int(text)
+    except (TypeError, ValueError):
+        pass
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        pass
+    return text
+
+
+def parse_pr_override(body: str | None) -> dict[str, object]:
+    """Parse per-PR overrides from a PR body fence.
+
+    Looks for::
+
+        ```quality-override
+        related_files: 2
+        ```
+
+    Returns a dict of ``key -> typed value`` (empty when absent). Only
+    ``key: value`` lines are honored; comments and other lines are ignored.
+    Never raises.
+    """
+    if not body or not isinstance(body, str):
+        return {}
+    try:
+        merged: dict[str, object] = {}
+        for match in _OVERRIDE_FENCE.finditer(body):
+            inner = match.group(1) or ""
+            for raw_line in inner.splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#") or ":" not in line:
+                    continue
+                key, _, value = line.partition(":")
+                norm = key.strip().lower().replace("-", "_")
+                if not norm:
+                    continue
+                merged[norm] = _override_value(value)
+        return merged
+    except (ValueError, TypeError, re.error):
+        return {}
+
+
 def _neighbors(root: Path, config: QualityConfig, paths: list[str]) -> list[str]:
     report = load_report_json(root, "impact.json")
     found: list[str] = []

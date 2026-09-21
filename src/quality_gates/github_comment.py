@@ -232,8 +232,32 @@ def _post_check_run(
     return f"GitHub check run HTTP {status}{message}"
 
 
+def _inline_confidence(item: Finding) -> float:
+    value = getattr(item, "confidence", 0.5)
+    if value is None or value == "":
+        return 0.5
+    if isinstance(value, bool):
+        return 0.5
+    if isinstance(value, (int, float)):
+        try:
+            return max(0.0, min(1.0, float(value)))
+        except (TypeError, ValueError):
+            return 0.5
+    text = str(value).strip()
+    if not text:
+        return 0.5
+    labels = {"HIGH": 0.9, "MEDIUM": 0.6, "LOW": 0.3}
+    if text.upper() in labels:
+        return labels[text.upper()]
+    try:
+        return max(0.0, min(1.0, float(text)))
+    except (TypeError, ValueError):
+        return 0.5
+
+
 def _inline_body(item: Finding) -> str:
     parts = [explain_finding(item)]
+    parts.extend(["", f"Confidence: `{_inline_confidence(item):.2f}`"])
     if item.reason and "Why it matters here" not in parts[0]:
         parts.extend(["", f"Why: {item.reason}"])
     if item.owasp or item.cwe:
@@ -255,10 +279,15 @@ def _inline_body(item: Finding) -> str:
     parts.extend(
         [
             "",
-            "Fix with `codesheriff oracle --prompt` or MCP `codesheriff_finding_context`.",
+            "Fix with `/sheriff fix`, `codesheriff oracle --prompt`, or MCP `codesheriff_finding_context`.",
         ]
     )
     return "\n".join(parts)
+
+
+def post_walkthrough(body: str) -> str:
+    """Post the walkthrough/summary body as a PR comment."""
+    return post_pr_comment(body)
 
 
 def merge_pr_body(existing: str, summary: str) -> str:

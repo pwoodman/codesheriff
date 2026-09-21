@@ -31,10 +31,11 @@ from quality_gates.cli_runtime import (
     _resolve_languages,
     _watch,
 )
-from quality_gates.config import is_pr_event, load_config
+from quality_gates.config import QualityConfig, is_pr_event, load_config
 from quality_gates.detect import detect_languages
 from quality_gates.doctor import doctor
 from quality_gates.evidence import attach_evidence
+from quality_gates.gates.review import run_review
 from quality_gates.gates.version import apply_bump
 from quality_gates.paths import cache_dir, project_root
 from quality_gates.planner import build_plan, render_plan, write_plan
@@ -413,6 +414,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--post",
         action="store_true",
         help="post inline review comments and a check run",
+    )
+    review.add_argument(
+        "--prove",
+        action="store_true",
+        help="draft best-effort pytest snippets for top findings "
+        "(.quality-reports/prove.md, never fails the build)",
+    )
+    review.add_argument(
+        "--light",
+        action="store_true",
+        help="fast review: related_files=2, tool_rounds=1, passes=1, single LLM pass",
+    )
+    review.add_argument(
+        "--agent",
+        action="store_true",
+        help="emit JSONL events (review_context,status,finding,complete) to stdout",
     )
 
     eval_p = sub.add_parser(
@@ -1142,9 +1159,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = gate_runners.run_version(root, config, base=args.base)
         return _emit([result], root, config, args.json, ["version"])
     if args.command == "review":
-        result = gate_runners.run_review(
-            root, config, languages, base=args.base, post=args.post
+        _apply_pr_overrides(root, config)
+        if getattr(args, "light", False):
+            _apply_light(config)
+        result = run_review(
+            root,
+            config,
+            languages,
+            base=args.base,
+            post=args.post,
+            prove=bool(getattr(args, "prove", False)),
         )
+        if getattr(args, "agent", False):
+            return _emit_agent([result], root, config)
         return _emit([result], root, config, args.json, ["review"])
     if args.command == "ui":
         result = gate_runners.run_ui(
@@ -1375,6 +1402,159 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     parser.error("unknown command")
     return 2
+
+
+def _apply_light(config: QualityConfig) -> None:
+    """Fast review preset: related_files=2, tool_rounds=1, passes=1 + light LLM."""
+    config.review_related_files = 2
+    config.review_tool_rounds = 1
+    config.review_passes = 1
+    config.light = True  # type: ignore[attr-defined]
+
+
+def _pr_body_from_env() -> str | None:
+    body = os.environ.get("QUALITY_PR_BODY")
+    if body:
+        return body
+    event_path = os.environ.get("GITHUB_EVENT_PATH")
+    if not event_path:
+        return None
+    try:
+        payload = json.loads(Path(event_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    for key in ("pull_request", "issue"):
+        section = payload.get(key)
+        if isinstance(section, dict) and section.get("body"):
+            return str(section["body"])
+    comment = payload.get("comment")
+    if isinstance(comment, dict) and comment.get("body"):
+        return str(comment["body"])
+    return None
+
+
+def _apply_pr_overrides(root: Path, config: QualityConfig) -> dict[str, object]:
+    """Apply per-PR overrides from the PR-body ```quality-override fence."""
+    try:
+        from quality_gates.review.context import parse_pr_override
+    except ImportError:
+        return {}
+    _ = root
+    try:
+        body = _pr_body_from_env()
+    except (OSError, ValueError):
+        return {}
+    if not body:
+        return {}
+    try:
+        overrides = parse_pr_override(body)
+    except (ValueError, TypeError):
+        return {}
+    if not overrides:
+        return {}
+    try:
+        if "related_files" in overrides:
+            config.review_related_files = max(
+                0, min(32, int(overrides["related_files"] or 0))
+            )
+        if "tool_rounds" in overrides:
+            config.review_tool_rounds = max(0, min(8, int(overrides["tool_rounds"])))
+        if "passes" in overrides:
+            config.review_passes = max(2, min(8, int(overrides["passes"] or 2)))
+        if "mode" in overrides:
+            mode = str(overrides["mode"]).strip().lower()
+            if mode in {"auto", "agentic", "ensemble", "single", "heuristic"}:
+                config.review_mode = mode
+        if "light" in overrides:
+            value = overrides["light"]
+            enabled = (
+                value
+                if isinstance(value, bool)
+                else str(value).strip().lower() in {"1", "true", "yes", "on"}
+            )
+            if enabled:
+                _apply_light(config)
+        if "prove" in overrides:
+            value = overrides["prove"]
+            _prove_flag = (
+                value
+                if isinstance(value, bool)
+                else str(value).strip().lower() in {"1", "true", "yes", "on"}
+            )
+            # Stored for callers that check config; CLI --prove remains explicit.
+            config.prove = bool(_prove_flag)  # type: ignore[attr-defined]
+    except (ValueError, TypeError, AttributeError):
+        pass
+    return overrides
+
+
+def _emit_agent(results, root: Path, config: QualityConfig) -> int:
+    """Emit JSONL agent events: review_context, status, finding, complete."""
+    from quality_gates.policy import apply_policy, maybe_comment_pr
+    from quality_gates.report import (
+        build_digest,
+        emit_annotations,
+        write_reports,
+    )
+
+    results, policy = apply_policy(results, root, config)
+    maybe_comment_pr(results, root, config, policy)
+    emit_annotations(results)
+    digest = build_digest(
+        results, policy=policy, report_dir=root / ".quality-reports", root=root
+    )
+    from contextlib import suppress
+
+    with suppress(OSError, ValueError):
+        write_reports(digest, root / ".quality-reports", policy=policy)
+    review = next((item for item in results if item.name == "review"), None)
+    findings = review.findings if review is not None else []
+    status = review.status if review is not None else "pass"
+    notes = review.notes if review is not None else []
+    print(json.dumps({"type": "review_context", "status": status, "notes": notes[:8]}))
+    print(
+        json.dumps(
+            {
+                "type": "status",
+                "status": status,
+                "errors": (review.error_count() if review is not None else 0),
+                "warnings": (review.warning_count() if review is not None else 0),
+            }
+        )
+    )
+    for item in findings:
+        print(
+            json.dumps(
+                {
+                    "type": "finding",
+                    "severity": item.severity,
+                    "path": item.path,
+                    "line": item.line,
+                    "rule": item.rule,
+                    "message": item.message,
+                }
+            )
+        )
+    print(
+        json.dumps(
+            {
+                "type": "complete",
+                "status": status,
+                "verdict": digest.verdict,
+                "findings": len(findings),
+            }
+        )
+    )
+    fail_on = config.fail_on
+    failed = [
+        item
+        for item in results
+        if item.status == "fail"
+        and (item.name in fail_on or (item.name == "review" and "review" in fail_on))
+    ]
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
