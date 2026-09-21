@@ -16,6 +16,7 @@ from quality_gates.identity import CHECK_NAME, PRODUCT
 from quality_gates.models import Finding
 from quality_gates.review.contract import suggestion_fence
 from quality_gates.review.explain import explain_finding
+from quality_gates.review.parse import coerce_confidence
 
 API_VERSION = "2022-11-28"
 MAX_INLINE = 24
@@ -233,26 +234,7 @@ def _post_check_run(
 
 
 def _inline_confidence(item: Finding) -> float:
-    value = getattr(item, "confidence", 0.5)
-    if value is None or value == "":
-        return 0.5
-    if isinstance(value, bool):
-        return 0.5
-    if isinstance(value, (int, float)):
-        try:
-            return max(0.0, min(1.0, float(value)))
-        except (TypeError, ValueError):
-            return 0.5
-    text = str(value).strip()
-    if not text:
-        return 0.5
-    labels = {"HIGH": 0.9, "MEDIUM": 0.6, "LOW": 0.3}
-    if text.upper() in labels:
-        return labels[text.upper()]
-    try:
-        return max(0.0, min(1.0, float(text)))
-    except (TypeError, ValueError):
-        return 0.5
+    return coerce_confidence(getattr(item, "confidence", 0.5))
 
 
 def _inline_body(item: Finding) -> str:

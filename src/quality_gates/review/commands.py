@@ -53,6 +53,7 @@ def paused_path(root: Path) -> Path:
 def is_paused(root: Path) -> bool:
     return paused_path(root).is_file()
 
+
 _LINE = re.compile(
     r"^/sheriff(?:\s+(?P<cmd>[a-z-]+))?(?:\s+(?P<rest>.+))?$",
     re.I | re.M,

@@ -1501,7 +1501,10 @@ def _emit_agent(results, root: Path, config: QualityConfig) -> int:
 
     results, policy = apply_policy(results, root, config)
     maybe_comment_pr(results, root, config, policy)
-    emit_annotations(results)
+    from contextlib import redirect_stdout
+
+    with redirect_stdout(sys.stderr):
+        emit_annotations(results)
     digest = build_digest(
         results, policy=policy, report_dir=root / ".quality-reports", root=root
     )

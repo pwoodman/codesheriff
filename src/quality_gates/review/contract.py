@@ -7,7 +7,7 @@ from typing import Any
 from quality_gates.diagnostics import pointer
 from quality_gates.models import Finding
 from quality_gates.playbook import autofix_command
-from quality_gates.review.parse import fingerprint
+from quality_gates.review.parse import coerce_confidence, fingerprint
 
 
 def verify_command(finding: Finding) -> str:
@@ -20,26 +20,7 @@ def verify_command(finding: Finding) -> str:
 
 
 def _payload_confidence(finding: Finding) -> float:
-    value = getattr(finding, "confidence", 0.5)
-    if value is None or value == "":
-        return 0.5
-    if isinstance(value, bool):
-        return 0.5
-    if isinstance(value, (int, float)):
-        try:
-            return max(0.0, min(1.0, float(value)))
-        except (TypeError, ValueError):
-            return 0.5
-    text = str(value).strip()
-    if not text:
-        return 0.5
-    labels = {"HIGH": 0.9, "MEDIUM": 0.6, "LOW": 0.3}
-    if text.upper() in labels:
-        return labels[text.upper()]
-    try:
-        return max(0.0, min(1.0, float(text)))
-    except (TypeError, ValueError):
-        return 0.5
+    return coerce_confidence(getattr(finding, "confidence", 0.5))
 
 
 def finding_payload(finding: Finding) -> dict[str, Any]:

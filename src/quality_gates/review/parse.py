@@ -32,8 +32,8 @@ def strictness_threshold(strictness: str | float | None) -> float:
     return STRICTNESS_THRESHOLDS.get(name, STRICTNESS_THRESHOLDS["standard"])
 
 
-def _confidence_value(finding: Finding) -> float:
-    value = getattr(finding, "confidence", 0.5)
+def coerce_confidence(value: object) -> float:
+    """Canonical confidence coercion shared by review rendering paths."""
     if value is None or value == "":
         return 0.5
     if isinstance(value, bool):
@@ -53,6 +53,10 @@ def _confidence_value(finding: Finding) -> float:
         return max(0.0, min(1.0, float(text)))
     except (TypeError, ValueError):
         return 0.5
+
+
+def _confidence_value(finding: Finding) -> float:
+    return coerce_confidence(getattr(finding, "confidence", 0.5))
 
 
 def filter_by_confidence(
@@ -117,25 +121,7 @@ def findings_from_payload(payload: dict[str, object]) -> tuple[str, list[Finding
 
 
 def _coerce_payload_confidence(value: object) -> float:
-    if value is None or value == "":
-        return 0.5
-    if isinstance(value, bool):
-        return 0.5
-    if isinstance(value, (int, float)):
-        try:
-            return max(0.0, min(1.0, float(value)))
-        except (TypeError, ValueError):
-            return 0.5
-    text = str(value).strip()
-    if not text:
-        return 0.5
-    labels = {"HIGH": 0.9, "MEDIUM": 0.6, "LOW": 0.3}
-    if text.upper() in labels:
-        return labels[text.upper()]
-    try:
-        return max(0.0, min(1.0, float(text)))
-    except (TypeError, ValueError):
-        return 0.5
+    return coerce_confidence(value)
 
 
 def fingerprint(finding: Finding, *, bucket: int = 5) -> str:

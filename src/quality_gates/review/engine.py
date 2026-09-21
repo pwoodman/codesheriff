@@ -36,6 +36,7 @@ from quality_gates.review.ledger import update_ledger
 from quality_gates.review.llm import resolve_client, run_llm_review, validate_findings
 from quality_gates.review.neighbors import function_windows
 from quality_gates.review.parse import (
+    coerce_confidence,
     drop_style_nits,
     filter_by_confidence,
     fingerprint,
@@ -575,26 +576,7 @@ def run_review(
 
 
 def _bullet_confidence(item: Finding) -> float:
-    value = getattr(item, "confidence", 0.5)
-    if value is None or value == "":
-        return 0.5
-    if isinstance(value, bool):
-        return 0.5
-    if isinstance(value, (int, float)):
-        try:
-            return max(0.0, min(1.0, float(value)))
-        except (TypeError, ValueError):
-            return 0.5
-    text = str(value).strip()
-    if not text:
-        return 0.5
-    labels = {"HIGH": 0.9, "MEDIUM": 0.6, "LOW": 0.3}
-    if text.upper() in labels:
-        return labels[text.upper()]
-    try:
-        return max(0.0, min(1.0, float(text)))
-    except (TypeError, ValueError):
-        return 0.5
+    return coerce_confidence(getattr(item, "confidence", 0.5))
 
 
 def render_review(
