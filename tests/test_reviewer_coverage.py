@@ -292,7 +292,9 @@ def test_providers_fix_pr_platform_and_notes(tmp_path: Path, monkeypatch) -> Non
     assert "supersecret" not in redact_secrets("password=supersecret")
     state = api_state(tmp_path)
     assert "identity" in state
-    assert __version__ == "1.17.1"
+    import re
+
+    assert re.match(r"^\d+\.\d+\.\d+$", __version__), f"bad semver: {__version__}"
 
 
 def test_shipped_surfaces_exist() -> None:

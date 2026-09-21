@@ -123,6 +123,35 @@ def score_findings(case: BenchCase, findings: list[Finding]) -> dict[str, Any]:
     }
 
 
+def sheriff_score(
+    recall: float,
+    fp_per_pr: float,
+    actionability: float,
+    p50_s: float,
+    cost_per_1k: float,
+) -> float:
+    """Weighted SheriffScore in ``[0, 1]`` (higher is better).
+
+    Weights: 0.35 recall + 0.25 precision proxy (``1 - min(1, fp/10)``) +
+    0.20 actionability + 0.10 latency proxy (``max(0, 1 - p50/300s)``) +
+    0.10 cost proxy (``max(0, 1 - cost/$50)``). Inputs are clamped to
+    ``[0, 1]``-ish ranges before weighting and the result is rounded to 4dp.
+    """
+    recall_term = max(0.0, min(1.0, float(recall)))
+    fp_term = 1.0 - min(1.0, max(0.0, float(fp_per_pr)) / 10.0)
+    action_term = max(0.0, min(1.0, float(actionability)))
+    latency_term = max(0.0, 1.0 - max(0.0, float(p50_s)) / 300.0)
+    cost_term = max(0.0, 1.0 - max(0.0, float(cost_per_1k)) / 50.0)
+    score = (
+        0.35 * recall_term
+        + 0.25 * fp_term
+        + 0.20 * action_term
+        + 0.10 * latency_term
+        + 0.10 * cost_term
+    )
+    return round(max(0.0, min(1.0, score)), 4)
+
+
 def run_heuristic_suite(
     directory: Path | None = None,
     *,
@@ -146,15 +175,41 @@ def run_heuristic_suite(
     negatives = [item for item in results if item["kind"] == "hard_negative"]
     caught = sum(1 for item in positives if item["ok"])
     quiet = sum(1 for item in negatives if item["ok"])
+    recall = round(caught / len(positives), 4) if positives else None
+    hard_negative_pass = round(quiet / len(negatives), 4) if negatives else None
+    # SheriffScore inputs derived from the heuristic run (offline: no timing
+    # or spend signal, so p50_s/cost are 0.0). fp_per_pr is the hard-negative
+    # failure rate; actionability is mean needle recall over positives that
+    # declare needles, falling back to recall when no needles exist.
+    needle_rates = [
+        item["needle_hits"] / item["needles"] for item in positives if item["needles"]
+    ]
+    actionability = (
+        round(sum(needle_rates) / len(needle_rates), 4)
+        if needle_rates
+        else (recall if recall is not None else 0.0)
+    )
+    fp_per_pr = (
+        round((len(negatives) - quiet) / len(negatives), 4) if negatives else 0.0
+    )
+    score_inputs = {
+        "recall": recall if recall is not None else 0.0,
+        "fp_per_pr": fp_per_pr,
+        "actionability": actionability,
+        "p50_s": 0.0,
+        "cost_per_1k": 0.0,
+    }
     return {
         "suite": "reviewbench",
         "cases": len(results),
         "positives": len(positives),
         "hard_negatives": len(negatives),
-        "recall": round(caught / len(positives), 4) if positives else None,
-        "hard_negative_pass": round(quiet / len(negatives), 4) if negatives else None,
+        "recall": recall,
+        "hard_negative_pass": hard_negative_pass,
         "failed": [item["id"] for item in results if not item["ok"]],
         "results": results,
+        "sheriff_score": sheriff_score(**score_inputs),
+        "sheriff_score_inputs": score_inputs,
     }
 
 

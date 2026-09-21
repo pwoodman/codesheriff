@@ -7,7 +7,7 @@ from typing import Any
 from quality_gates.diagnostics import pointer
 from quality_gates.models import Finding
 from quality_gates.playbook import autofix_command
-from quality_gates.review.parse import fingerprint
+from quality_gates.review.parse import coerce_confidence, fingerprint
 
 
 def verify_command(finding: Finding) -> str:
@@ -19,6 +19,10 @@ def verify_command(finding: Finding) -> str:
     return f"quality {gate}"
 
 
+def _payload_confidence(finding: Finding) -> float:
+    return coerce_confidence(getattr(finding, "confidence", 0.5))
+
+
 def finding_payload(finding: Finding) -> dict[str, Any]:
     loc = pointer(finding)
     payload: dict[str, Any] = {
@@ -28,6 +32,7 @@ def finding_payload(finding: Finding) -> dict[str, Any]:
         "message": finding.message,
         "location": loc,
         "verify": verify_command(finding),
+        "confidence": _payload_confidence(finding),
     }
     for key in (
         "path",
@@ -41,7 +46,6 @@ def finding_payload(finding: Finding) -> dict[str, Any]:
         "documentation_url",
         "snippet",
         "patch",
-        "confidence",
         "cwe",
         "owasp",
         "epss",

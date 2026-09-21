@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import html
+import re
+import urllib.parse
 
 from quality_gates.diagnostics import pointer
 from quality_gates.models import Finding
@@ -74,6 +76,7 @@ def render_html(digest: QualityDigest) -> str:
         f"{_html_performance(digest)}"
         f"{_html_history(digest)}"
         f"{_html_issues(digest, blob_base)}"
+        f"{_html_change_stack(digest)}"
         f"{_html_recommendations(digest)}"
         f"{_html_gates(digest)}"
         f"</main>{_HTML_SCRIPT}</body></html>\n"
@@ -262,6 +265,72 @@ def _html_issues(digest: QualityDigest, blob_base: str = "") -> str:
             f"<details class='nest'{open_attr}><summary><strong>"
             f"{html.escape(gate)}</strong> · {len(findings)}</summary>"
             f"<ul class='issues'>{items}</ul></details>"
+        )
+    parts.append("</section>")
+    return "".join(parts)
+
+
+def _code_peek_url(path: str) -> str:
+    """GitHub code-search URL scoped to ``path`` (works without a repo slug)."""
+    query = urllib.parse.quote_plus(f"path:{path}")
+    return f"https://github.com/search?q={query}&type=code"
+
+
+def _slug(path: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", path.lower()).strip("-") or "root"
+
+
+def _html_change_stack(digest: QualityDigest) -> str:
+    """Change-Stack-lite: findings grouped by top-level dir cohort.
+
+    Each cohort lists its files (with ``id`` anchors so gate sections and
+    external notes can deep-link) plus a per-file **Code Peek** link to
+    GitHub code search. Purely additive: renders from digest findings only.
+    """
+    by_file: dict[str, list[Finding]] = {}
+    order: list[str] = []
+    for result in digest.results:
+        for item in result.findings:
+            if not item.path:
+                continue
+            if item.path not in by_file:
+                by_file[item.path] = []
+                order.append(item.path)
+            by_file[item.path].append(item)
+    if not by_file:
+        return ""
+    cohorts: dict[str, list[str]] = {}
+    for path in order:
+        top = path.split("/")[0] if "/" in path else "(root)"
+        cohorts.setdefault(top, []).append(path)
+    parts = [
+        "<section class='card'><h2>Change stack</h2>"
+        "<p class='hint'>Findings grouped by top-level directory cohort. "
+        "File rows carry anchors; Code Peek opens GitHub code search for that path.</p>"
+    ]
+    for cohort in sorted(cohorts):
+        files = sorted(cohorts[cohort])
+        count = sum(len(by_file[path]) for path in files)
+        peek = _code_peek_url(cohort if cohort != "(root)" else "")
+        rows = []
+        for path in files:
+            items = by_file[path]
+            errors = sum(1 for item in items if item.severity == "error")
+            warns = sum(1 for item in items if item.severity == "warning")
+            rows.append(
+                f"<li id='file-{_slug(path)}'>"
+                f"<code>{html.escape(path)}</code> "
+                f"<span class='dim'>· {len(items)} finding(s), "
+                f"{errors} errors, {warns} warnings</span> "
+                f"<a href='{html.escape(_code_peek_url(path), quote=True)}'>Code Peek</a>"
+                "</li>"
+            )
+        parts.append(
+            f"<details class='nest' open><summary><strong>"
+            f"{html.escape(cohort)}</strong> · {len(files)} file(s), "
+            f"{count} finding(s) · "
+            f"<a href='{html.escape(peek, quote=True)}'>Code Peek</a>"
+            f"</summary><ul>{''.join(rows)}</ul></details>"
         )
     parts.append("</section>")
     return "".join(parts)

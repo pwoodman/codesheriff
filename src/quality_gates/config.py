@@ -96,6 +96,11 @@ class QualityConfig:
     review_disabled_categories: list[str] = field(default_factory=list)
     review_packs: list[str] = field(default_factory=lambda: ["auto"])
     review_base_url: str = ""
+    review_strictness: str = "standard"
+    review_fail_severity: str = "error"
+    review_ignore_labels: list[str] = field(default_factory=list)
+    light: bool = False
+    prove: bool = False
     retention_days: int = 0
     cost_monthly_cap: float = 0.0
     cost_per_pr_tokens: int = 0
@@ -350,6 +355,13 @@ def load_config(project: Path) -> QualityConfig:
         review_disabled_categories=_as_list(review.get("disable_categories"), []),
         review_packs=_as_list(review.get("packs"), ["auto"]),
         review_base_url=str(review.get("base_url") or ""),
+        review_strictness=_review_strictness(review.get("strictness", "standard")),
+        review_fail_severity=_review_fail_severity(
+            review.get("fail_severity", "error")
+        ),
+        review_ignore_labels=_as_list(review.get("ignore_labels"), []),
+        light=_as_bool(quality.get("light"), False),
+        prove=_as_bool(quality.get("prove"), False),
         retention_days=int(_section(data, "quality", "retention").get("days") or 0),
         cost_monthly_cap=_as_float(
             _section(data, "quality", "cost").get("monthly_cap"), 0.0
@@ -531,6 +543,20 @@ def _review_mode(value: Any) -> str:
     if mode not in {"auto", "agentic", "ensemble", "single", "heuristic"}:
         return "auto"
     return mode
+
+
+def _review_strictness(value: Any) -> str:
+    name = str(value or "standard").strip().lower()
+    if name not in {"quiet", "standard", "strict"}:
+        return "standard"
+    return name
+
+
+def _review_fail_severity(value: Any) -> str:
+    name = str(value or "error").strip().lower()
+    if name not in {"error", "warning", "info"}:
+        return "error"
+    return name
 
 
 def _confidence_mode(value: Any) -> str:

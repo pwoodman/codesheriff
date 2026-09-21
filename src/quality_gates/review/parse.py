@@ -16,6 +16,57 @@ NIT_RE = re.compile(
 )
 STYLE_RULES = frozenset({"format", "lint", "style", "nits", "formatting"})
 
+# P0 strictness mapping: minimum confidence required to keep a finding.
+STRICTNESS_THRESHOLDS: dict[str, float] = {
+    "quiet": 0.8,
+    "standard": 0.5,
+    "strict": 0.2,
+}
+
+
+def strictness_threshold(strictness: str | float | None) -> float:
+    """Map a strictness name (quiet/standard/strict) to a confidence floor."""
+    if isinstance(strictness, (int, float)) and not isinstance(strictness, bool):
+        return max(0.0, min(1.0, float(strictness)))
+    name = str(strictness or "standard").strip().lower()
+    return STRICTNESS_THRESHOLDS.get(name, STRICTNESS_THRESHOLDS["standard"])
+
+
+def coerce_confidence(value: object) -> float:
+    """Canonical confidence coercion shared by review rendering paths."""
+    if value is None or value == "":
+        return 0.5
+    if isinstance(value, bool):
+        return 0.5
+    if isinstance(value, (int, float)):
+        try:
+            return max(0.0, min(1.0, float(value)))
+        except (TypeError, ValueError):
+            return 0.5
+    text = str(value).strip()
+    if not text:
+        return 0.5
+    labels = {"HIGH": 0.9, "MEDIUM": 0.6, "LOW": 0.3}
+    if text.upper() in labels:
+        return labels[text.upper()]
+    try:
+        return max(0.0, min(1.0, float(text)))
+    except (TypeError, ValueError):
+        return 0.5
+
+
+def _confidence_value(finding: Finding) -> float:
+    return coerce_confidence(getattr(finding, "confidence", 0.5))
+
+
+def filter_by_confidence(
+    findings: list[Finding],
+    strictness: str | float = "standard",
+) -> list[Finding]:
+    """Keep findings at or above the strictness confidence floor."""
+    floor = strictness_threshold(strictness)
+    return [item for item in findings if _confidence_value(item) >= floor]
+
 
 def parse_json_object(text: str) -> dict[str, object] | None:
     cleaned = _strip_fence(text.strip())
@@ -63,9 +114,14 @@ def findings_from_payload(payload: dict[str, object]) -> tuple[str, list[Finding
                 patch=str(item.get("patch") or "").strip() or None,
                 verify=str(item.get("verify") or "").strip() or None,
                 reproduce=str(item.get("reproduce") or "").strip() or None,
+                confidence=_coerce_payload_confidence(item.get("confidence")),
             )
         )
     return summary, findings
+
+
+def _coerce_payload_confidence(value: object) -> float:
+    return coerce_confidence(value)
 
 
 def fingerprint(finding: Finding, *, bucket: int = 5) -> str:

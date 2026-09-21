@@ -104,6 +104,9 @@ full_model = ""        # default sonnet / gpt-4.1
 validate = true
 verify_tests = false
 symbol_neighbors = true
+strictness = "standard"  # quiet (>=0.8) | standard (>=0.5) | strict (>=0.2)
+fail_severity = "error"  # error | warning | info (when review is in fail_on)
+ignore_labels = []       # e.g. ["large-pr"] — rules/labels to skip
 ```
 
 Set `ai_review = "always"` in `quality.toml` to run on branch pushes as well.
@@ -140,3 +143,20 @@ reconstructed commons-math GCD sample they published. `quality eval` also writes
 `.quality-reports/eval/SCORECARD.md`.
 
 Without a key, you still get the heuristic review as `.quality-reports/review.md`.
+
+## P0 knobs (confidence, strictness, effort, pause/resume)
+
+- Every review `Finding` carries `confidence` (0.0–1.0 float, default `0.5`).
+  It serializes in `.quality-reports/review.json` (`finding_payload`) and every
+  inline comment shows a `Confidence:` line plus a `Fix with \`/sheriff fix\``
+  button.
+- `quality.review.strictness` maps to a confidence floor applied **after**
+  `merge_findings` but **before** `enrich_findings`:
+  `quiet >= 0.8`, `standard >= 0.5`, `strict >= 0.2`.
+- Review effort is `Effort = 1 + min(4, files // 3 + blockers)` on a 1–5 scale,
+  where `files` is the changed-file count and `blockers` is the number of
+  `severity == error` findings. It renders in the `## Walkthrough` header
+  (summary / effort / files / related) with a collapsible `<details>` block.
+- `/sheriff pause` writes `.quality-reports/sheriff-paused` (the review engine
+  skips while present); `/sheriff resume` clears it. `/sheriff full` forces a
+  full review vs incremental (no changed-path restriction, `base` ignored).

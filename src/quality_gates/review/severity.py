@@ -36,6 +36,14 @@ def normalize_level(value: str | None) -> str:
     return "medium"
 
 
+def _is_low_confidence(value: object) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return float(value) <= 0.3
+    return str(value or "").strip().upper() == "LOW"
+
+
 def taxonomy_level(finding: Finding) -> str:
     if finding.rule and finding.rule.lower() in {
         "hardcoded-secret",
@@ -45,13 +53,14 @@ def taxonomy_level(finding: Finding) -> str:
         return "critical"
     if (finding.owasp or "") and finding.severity == "error":
         return "high"
-    if finding.confidence == "LOW" and finding.severity != "error":
+    if _is_low_confidence(finding.confidence) and finding.severity != "error":
         return "low"
     return _FROM_FINDING.get(finding.severity, "medium")
 
 
 def apply_taxonomy(finding: Finding) -> Finding:
-    finding.confidence = finding.confidence or "HIGH"
+    if finding.confidence is None or finding.confidence == "":
+        finding.confidence = 0.9
     level = taxonomy_level(finding)
     if finding.severity in {"error", "warning", "info"}:
         finding.severity = _TO_FINDING.get(level, finding.severity)

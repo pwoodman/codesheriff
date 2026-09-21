@@ -16,6 +16,7 @@ from quality_gates.identity import CHECK_NAME, PRODUCT
 from quality_gates.models import Finding
 from quality_gates.review.contract import suggestion_fence
 from quality_gates.review.explain import explain_finding
+from quality_gates.review.parse import coerce_confidence
 
 API_VERSION = "2022-11-28"
 MAX_INLINE = 24
@@ -232,8 +233,13 @@ def _post_check_run(
     return f"GitHub check run HTTP {status}{message}"
 
 
+def _inline_confidence(item: Finding) -> float:
+    return coerce_confidence(getattr(item, "confidence", 0.5))
+
+
 def _inline_body(item: Finding) -> str:
     parts = [explain_finding(item)]
+    parts.extend(["", f"Confidence: `{_inline_confidence(item):.2f}`"])
     if item.reason and "Why it matters here" not in parts[0]:
         parts.extend(["", f"Why: {item.reason}"])
     if item.owasp or item.cwe:
@@ -255,10 +261,15 @@ def _inline_body(item: Finding) -> str:
     parts.extend(
         [
             "",
-            "Fix with `codesheriff oracle --prompt` or MCP `codesheriff_finding_context`.",
+            "Fix with `/sheriff fix`, `codesheriff oracle --prompt`, or MCP `codesheriff_finding_context`.",
         ]
     )
     return "\n".join(parts)
+
+
+def post_walkthrough(body: str) -> str:
+    """Post the walkthrough/summary body as a PR comment."""
+    return post_pr_comment(body)
 
 
 def merge_pr_body(existing: str, summary: str) -> str:

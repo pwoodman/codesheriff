@@ -106,7 +106,16 @@
             "fail_on_severity": {"type": "array", "items": {"type": "string"}},
             "disable_categories": {"type": "array", "items": {"type": "string"}},
             "packs": {"type": "array", "items": {"type": "string"}},
-            "base_url": {"type": "string"}
+            "base_url": {"type": "string"},
+            "strictness": {
+              "type": "string",
+              "enum": ["quiet", "standard", "strict"]
+            },
+            "fail_severity": {
+              "type": "string",
+              "enum": ["error", "warning", "info"]
+            },
+            "ignore_labels": {"type": "array", "items": {"type": "string"}}
           }
         },
         "retention": {"type": "object"},
