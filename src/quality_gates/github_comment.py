@@ -267,9 +267,24 @@ def _inline_body(item: Finding) -> str:
     return "\n".join(parts)
 
 
-def post_walkthrough(body: str) -> str:
-    """Post the walkthrough/summary body as a PR comment."""
-    return post_pr_comment(body)
+def post_walkthrough(body: str, *, paths: list[str] | None = None) -> str:
+    """Post the walkthrough/summary body as a PR comment, with Mermaid diagrams."""
+    enriched = body
+    if paths:
+        from quality_gates.review.diagrams import (
+            generate_mermaid_flowchart,
+            generate_mermaid_sequence_diagram,
+        )
+
+        seq = generate_mermaid_sequence_diagram(paths)
+        flow = generate_mermaid_flowchart(paths)
+        parts = [enriched]
+        if seq:
+            parts.extend(["", "### Control Flow", seq])
+        if flow:
+            parts.extend(["", "### Architecture", flow])
+        enriched = "\n".join(parts)
+    return post_pr_comment(enriched)
 
 
 def merge_pr_body(existing: str, summary: str) -> str:
@@ -348,6 +363,40 @@ def request_copilot_review() -> str:
     detail = payload.get("message") if isinstance(payload, dict) else ""
     suffix = f": {detail}" if detail else ""
     return f"GitHub Copilot review request failed (HTTP {status}{suffix})"
+
+
+def auto_approve_pr(findings_count: int = 0, risk: str = "low") -> str:
+    """Auto-approve a PR when risk is low and no blocking findings.
+
+    Returns a status message. Only approves when:
+    - risk is 'low'
+    - findings_count is 0 or all are info/warning
+    - running as the GitHub App (not Actions)
+    """
+    creds = _creds()
+    if creds is None:
+        return "skipped auto-approve (not in GitHub context)"
+    if risk not in ("low",) or findings_count > 0:
+        return f"skipped auto-approve (risk={risk}, findings={findings_count})"
+    token, repo, pr = creds
+    status, payload = _request(
+        "POST",
+        api_url(f"/repos/{repo}/pulls/{pr}/reviews"),
+        token,
+        {
+            "commit_id": pr_head_sha() or "",
+            "event": "APPROVE",
+            "body": (
+                "LGTM — The Code Sheriff found no blocking issues and rated this "
+                "PR as low risk. Auto-approved."
+            ),
+        },
+    )
+    if 200 <= status < 300:
+        return f"auto-approved PR #{pr}"
+    detail = payload.get("message") if isinstance(payload, dict) else ""
+    suffix = f": {detail}" if detail else ""
+    return f"auto-approve failed (HTTP {status}{suffix})"
 
 
 def _request(

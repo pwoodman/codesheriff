@@ -231,6 +231,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             "  run        run the change-aware gate suite (the everyday command)\n"
             "  fix        apply safe automatic remediations\n"
             "  oracle     remaining blockers + one Next action (agent loop)\n"
+            "  status     quick project health overview\n"
+            "  agent      unified agent interface (context, findings, loop)\n"
+            "  hooks      manage git hooks and automations\n"
+            "  interact   interactive slash-command mode\n"
             "  report     reprint the last run's scorecard\n"
             "  doctor     diagnose missing tools\n"
             "  certify    merge certificate (auto-merge readiness)\n"
@@ -446,6 +450,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "macroscope",
             "aacrbench",
             "aacrhard",
+            "validation",
             "all",
         ],
         default="reviewbench",

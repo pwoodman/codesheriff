@@ -208,6 +208,10 @@ def _eval(root: Path, args: argparse.Namespace) -> int:
         from quality_gates.review.aacr_bench import run_aacr_hard_evaluation
 
         payload["aacrhard"] = run_aacr_hard_evaluation(root)
+    if suite in {"validation", "all"}:
+        from quality_gates.benchmark import run_full_benchmark
+
+        payload["validation"] = run_full_benchmark(root)
     if args.llm and not llm_eval_enabled():
         payload["llm"] = {
             "skipped": True,

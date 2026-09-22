@@ -137,6 +137,133 @@ TOOLS = [
             },
         },
     },
+    {
+        "name": "codesheriff_status",
+        "description": (
+            "Return the project health status: gate verdicts, blockers, "
+            "certificate state, and agent loop status. Use --prompt for a "
+            "human-readable summary."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "boolean"},
+                "verbose": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "codesheriff_hooks",
+        "description": (
+            "Manage git hooks and automations. List installed hooks, "
+            "install/uninstall pre-commit hooks, and show automation triggers."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["status", "list", "install", "uninstall"],
+                    "description": "Action to perform on hooks.",
+                }
+            },
+        },
+    },
+    {
+        "name": "codesheriff_agent",
+        "description": (
+            "Unified agent interface: get context, next action, findings, "
+            "prompt, or explanation. Use action='loop' for the full agent loop."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": [
+                        "context",
+                        "findings",
+                        "next",
+                        "apply",
+                        "prompt",
+                        "loop",
+                        "explain",
+                    ],
+                    "description": "Agent action to perform.",
+                },
+                "id": {
+                    "type": "string",
+                    "description": "Finding ID for apply/context/explain.",
+                },
+                "full": {
+                    "type": "boolean",
+                    "description": "Include full context details.",
+                },
+            },
+        },
+    },
+    {
+        "name": "codesheriff_interact",
+        "description": (
+            "Interactive slash-command mode. Parse /sheriff commands, "
+            "list available commands, or enter interactive mode."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "Slash command like /sheriff review.",
+                },
+                "reply": {
+                    "type": "string",
+                    "description": "Reply text for slash commands.",
+                },
+            },
+        },
+    },
+    {
+        "name": "codesheriff_ask",
+        "description": (
+            "Natural language Q&A over the codebase. Ask questions like "
+            "'where is auth handled?' or 'what calls this function?' to get "
+            "symbol context and related files."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "Natural language question about the codebase.",
+                }
+            },
+            "required": ["question"],
+        },
+    },
+    {
+        "name": "codesheriff_handoff",
+        "description": (
+            "Generate one-click agent handoff context for a finding. "
+            "Returns a prompt ready for Claude Code, Cursor, or Codex."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "Finding ID from codesheriff_finding_context.",
+                },
+                "path": {
+                    "type": "string",
+                    "description": "File path to get context for.",
+                },
+                "rule": {
+                    "type": "string",
+                    "description": "Rule name for context.",
+                },
+            },
+        },
+    },
 ]
 
 
@@ -295,6 +422,140 @@ def _call_tool(
         payload = remaining_from_reports(_root())
         payload["exit_code"] = code
         return json.dumps(payload, indent=2)
+    if name == "codesheriff_status":
+        import json as _json
+
+        from quality_gates.status_payload import status_payload
+
+        payload = status_payload(_root())
+        if args.get("prompt"):
+            return render_prompt(payload)
+        if args.get("verbose"):
+            return _json.dumps(payload, indent=2)
+        return _json.dumps(
+            {
+                "green": payload.get("green"),
+                "certificate_ready": (payload.get("certificate") or {}).get("ready"),
+                "blocking_count": len(payload.get("blocking") or []),
+                "warning_count": len(payload.get("warnings") or []),
+                "next": (payload.get("playbook") or {})
+                .get("next", {})
+                .get("instruction"),
+            },
+            indent=2,
+        )
+    if name == "codesheriff_hooks":
+        from quality_gates.status_payload import hooks_payload
+
+        action = args.get("action", "status")
+        result = hooks_payload(_root())
+        if action == "install":
+            import subprocess
+
+            root_val = _root()
+            precommit = root_val / ".pre-commit-config.yaml"
+            if precommit.is_file():
+                subprocess.run(
+                    [
+                        "pre-commit",
+                        "install",
+                        "--hook-type",
+                        "pre-commit",
+                        "--hook-type",
+                        "pre-push",
+                    ],
+                    cwd=root_val,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                result["hooks"] = hooks_payload(root_val)["hooks"]
+                result["installed"] = True
+        if action == "uninstall":
+            hooks_dir = _root() / ".git" / "hooks"
+            for hook_file in ["pre-commit", "pre-push"]:
+                hook_path = hooks_dir / hook_file
+                if hook_path.exists():
+                    hook_path.unlink()
+            result["uninstalled"] = True
+        return json.dumps(result, indent=2)
+    if name == "codesheriff_agent":
+        from quality_gates.status_payload import agent_payload
+
+        action = args.get("action", "context")
+        finding_id = args.get("id")
+        result = agent_payload(_root(), action=action, finding_id=finding_id)
+        if action == "next":
+            result["next"] = (
+                (result.get("status") or {}).get("playbook", {}).get("next", {})
+            )
+        if action == "loop":
+            result["loop"] = "run codesheriff agent --stream"
+        return json.dumps(result, indent=2)
+    if name == "codesheriff_interact":
+        from quality_gates.review.commands import help_text, parse_sheriff_command
+
+        cmd = args.get("command")
+        if cmd and cmd.startswith("/sheriff"):
+            parsed = parse_sheriff_command(cmd)
+            if parsed:
+                return json.dumps(
+                    {
+                        "command": parsed.name,
+                        "focus": parsed.focus,
+                        "argument": parsed.argument,
+                        "forces_review": parsed.forces_review,
+                    },
+                    indent=2,
+                )
+            return json.dumps(
+                {"error": "invalid command", "help": help_text()}, indent=2
+            )
+        if not cmd:
+            payload = remaining_from_reports(_root())
+            return json.dumps(
+                {
+                    "mode": "interactive",
+                    "green": payload.get("green"),
+                    "ready": (payload.get("certificate") or {}).get("ready"),
+                    "commands": [
+                        "/sheriff review",
+                        "/sheriff fix",
+                        "/sheriff pause",
+                        "/sheriff resume",
+                    ],
+                },
+                indent=2,
+            )
+        return json.dumps({"command": cmd, "status": "unhandled"}, indent=2)
+    if name == "codesheriff_ask":
+        from quality_gates.review.index import answer_question
+
+        question = str(args.get("question") or "").strip()
+        if not question:
+            return json.dumps({"error": "question is required"}, indent=2)
+        result = answer_question(_root(), question)
+        return json.dumps(result, indent=2)
+    if name == "codesheriff_handoff":
+        from quality_gates.review.index import get_agent_handoff_context
+
+        finding_id = str(args.get("id") or "")
+        path = str(args.get("path") or "")
+        rule = str(args.get("rule") or "")
+
+        if finding_id:
+            packed = finding_from_reports(_root(), finding_id)
+            row = packed.get("finding")
+            if isinstance(row, dict):
+                path = path or str(row.get("path") or "")
+                rule = rule or str(row.get("rule") or "")
+
+        result = get_agent_handoff_context(
+            _root(),
+            finding_path=path or None,
+            finding_rule=rule or None,
+        )
+        return json.dumps(result, indent=2)
     return f"unknown tool {name}"
 
 
