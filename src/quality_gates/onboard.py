@@ -150,8 +150,9 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.12"
-      - name: Install quality-gates
-        run: pip install "git+https://github.com/{source}.git@{pin}"
+      - name: Install The Code Sheriff
+        # Preferred: PyPI. Fallback when offline-pinned: git+https://github.com/{source}.git@{pin}
+        run: pip install "codesheriff" || pip install "git+https://github.com/{source}.git@{pin}"
       - name: Run gates
         env:
           GITHUB_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
@@ -242,10 +243,10 @@ repos:
   - repo: https://github.com/{source}
     rev: {pin}
     hooks:
-      - id: quality-format
-      - id: quality-lint
-      - id: quality-version
-      - id: quality-push
+      - id: sheriff-format
+      - id: sheriff-lint
+      - id: sheriff-version
+      - id: sheriff-push
 """
 
 

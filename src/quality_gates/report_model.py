@@ -74,6 +74,7 @@ class QualityDigest:
     performance: PerformanceSnapshot
     recommendations: list[Recommendation]
     report_dir: Path | None = None
+    metrics: Any = None  # ReviewMetrics from quality_gates.metrics
 
     @property
     def errors(self) -> int:

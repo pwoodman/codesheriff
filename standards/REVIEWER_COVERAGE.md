@@ -1,6 +1,6 @@
 # Reviewer capability coverage
 
-Living matrix for the 100 GitHub-native reviewer capabilities.
+Living matrix for the 97 GitHub-native reviewer capabilities.
 Status is `shipped` only when `tests/test_reviewer_coverage.py` asserts the How.
 
 The catalog lives in `quality_gates.reviewer_coverage.ITEMS`.
@@ -64,49 +64,46 @@ The catalog lives in `quality_gates.reviewer_coverage.ITEMS`.
 | 55 | Review Latency Dashboard | shipped | `latency_breakdown` |
 | 56 | GitHub Actions Integration | shipped | `quality.yml + sheriff.yml` |
 | 57 | CLI for Local Review | shipped | `quality review / check` |
-| 58 | VS Code Extension | shipped | `editor/vscode` |
-| 59 | JetBrains Support | shipped | `editor/jetbrains` |
-| 60 | OpenAI-Compatible Endpoint Support | shipped | `OPENAI_BASE_URL` |
-| 61 | Local/Self-Hosted Option | shipped | `CLI + compose worker` |
-| 62 | VPC/Private-Network Execution | shipped | `self-hosted runners + compose` |
-| 63 | Secrets Redaction | shipped | `redact_secrets` |
-| 64 | Audit Logs | shipped | `audit.jsonl` |
-| 65 | RBAC | shipped | `map_github_role` |
-| 66 | SSO/SAML and SCIM | shipped | `app_identity.sso/scim` |
-| 67 | Security-Policy Packs | shipped | `owasp-asvs + cwe-top-25` |
-| 68 | Compliance Evidence Export | shipped | `export_evidence` |
-| 69 | Vulnerability Verification | shipped | `reachability via impact/index` |
-| 70 | Static Analysis Integration | shipped | `ingest_sarif` |
-| 71 | Finding Deduplication | shipped | `dedupe_findings` |
-| 72 | Baseline Management | shipped | `observe/adopt/enforce` |
-| 73 | Custom Rule Authoring | shipped | `.quality/rules markdown` |
-| 74 | Rule Simulation | shipped | `simulate_rule` |
-| 75 | Review Analytics | shipped | `cost/history + feedback` |
-| 76 | Signal-Quality Analytics | shipped | `reviewbench + feedback` |
-| 77 | Per-Rule Performance | shipped | `rule_stats` |
-| 78 | Cost Dashboard | shipped | `cost.json` |
-| 79 | Cost Budgets and Caps | shipped | `within_budget` |
-| 80 | Pricing Aligned to Value | shipped | `app_identity.pricing` |
-| 81 | Change-Impact Map | shipped | `impact_map` |
-| 82 | API Contract Review | shipped | `contract gate` |
-| 83 | Database Migration Review | shipped | `migration pack + advanced gate` |
-| 84 | Performance Review | shipped | `performance pack` |
-| 85 | Concurrency Review | shipped | `concurrency pack + regex` |
-| 86 | Error-Handling Review | shipped | `error-handling pack + regex` |
-| 87 | Accessibility Review | shipped | `accessibility pack` |
-| 88 | Documentation Drift Detection | shipped | `docs_drift` |
-| 89 | Release-Note Draft | shipped | `notes.draft_notes` |
-| 90 | Issue Linkage Awareness | shipped | `linked_issues` |
-| 91 | Architecture Decision Awareness | shipped | `load_adrs` |
-| 92 | Historical Code-Review Awareness | shipped | `similar_history` |
-| 93 | Learning from Dispositions | shipped | `apply_feedback non-security` |
-| 94 | Reviewer Workload Routing | shipped | `suggest_reviewers` |
-| 95 | Slack/Teams Notifications | shipped | `notify_chat` |
-| 96 | Public API | shipped | `quality serve` |
-| 97 | Webhooks for Outcomes | shipped | `emit_outcome` |
-| 98 | Terraform Provider | shipped | `terraform_schema + terraform/codesheriff` |
-| 99 | Open-Source Core/SDK | shipped | `MIT + quality.schema.json + packs` |
-| 100 | Transparent Evaluation Suite | shipped | `quality eval + standards/EVAL.md` |
+| 58 | OpenAI-Compatible Endpoint Support | shipped | `OPENAI_BASE_URL` |
+| 59 | Local/Self-Hosted Option | shipped | `CLI + `codesheriff serve`` |
+| 60 | VPC/Private-Network Execution | shipped | `self-hosted runners + offline mode` |
+| 61 | Secrets Redaction | shipped | `redact_secrets` |
+| 62 | Audit Logs | shipped | `audit.jsonl` |
+| 63 | RBAC | shipped | `map_github_role` |
+| 64 | SSO/SAML and SCIM | shipped | `app_identity.sso/scim` |
+| 65 | Security-Policy Packs | shipped | `owasp-asvs + cwe-top-25` |
+| 66 | Compliance Evidence Export | shipped | `export_evidence` |
+| 67 | Vulnerability Verification | shipped | `reachability via impact/index` |
+| 68 | Static Analysis Integration | shipped | `ingest_sarif` |
+| 69 | Finding Deduplication | shipped | `dedupe_findings` |
+| 70 | Baseline Management | shipped | `observe/adopt/enforce` |
+| 71 | Custom Rule Authoring | shipped | `.quality/rules markdown` |
+| 72 | Rule Simulation | shipped | `simulate_rule` |
+| 73 | Review Analytics | shipped | `cost/history + feedback` |
+| 74 | Signal-Quality Analytics | shipped | `reviewbench + feedback` |
+| 75 | Per-Rule Performance | shipped | `rule_stats` |
+| 76 | Cost Dashboard | shipped | `cost.json` |
+| 77 | Cost Budgets and Caps | shipped | `within_budget` |
+| 78 | Pricing Aligned to Value | shipped | `app_identity.pricing` |
+| 79 | Change-Impact Map | shipped | `impact_map` |
+| 80 | API Contract Review | shipped | `contract gate` |
+| 81 | Database Migration Review | shipped | `migration pack + advanced gate` |
+| 82 | Performance Review | shipped | `performance pack` |
+| 83 | Concurrency Review | shipped | `concurrency pack + regex` |
+| 84 | Error-Handling Review | shipped | `error-handling pack + regex` |
+| 85 | Accessibility Review | shipped | `accessibility pack` |
+| 86 | Documentation Drift Detection | shipped | `docs_drift` |
+| 87 | Release-Note Draft | shipped | `notes.draft_notes` |
+| 88 | Issue Linkage Awareness | shipped | `linked_issues` |
+| 89 | Architecture Decision Awareness | shipped | `load_adrs` |
+| 90 | Historical Code-Review Awareness | shipped | `similar_history` |
+| 91 | Learning from Dispositions | shipped | `apply_feedback non-security` |
+| 92 | Reviewer Workload Routing | shipped | `suggest_reviewers` |
+| 93 | Slack/Teams Notifications | shipped | `notify_chat` |
+| 94 | Public API | shipped | `quality serve` |
+| 95 | Webhooks for Outcomes | shipped | `emit_outcome` |
+| 96 | Open-Source Core/SDK | shipped | `MIT + quality.schema.json + packs` |
+| 97 | Transparent Evaluation Suite | shipped | `quality eval + standards/EVAL.md` |
 
 Run:
 

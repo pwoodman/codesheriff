@@ -230,20 +230,6 @@ def serve_api(root: Path, *, host: str = "127.0.0.1", port: int = 8788) -> int:
     return 0
 
 
-def terraform_schema() -> dict[str, Any]:
-    return {
-        "provider": "codesheriff",
-        "resources": [
-            "codesheriff_repo",
-            "codesheriff_policy",
-            "codesheriff_model_provider",
-            "codesheriff_budget",
-            "codesheriff_team",
-        ],
-        "module": "terraform/codesheriff",
-    }
-
-
 def simulate_rule(paths: list[str], pattern: str) -> dict[str, Any]:
     from fnmatch import fnmatch
 

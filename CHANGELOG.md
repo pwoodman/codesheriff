@@ -4,9 +4,30 @@
 
 
 
-## 1.18.0
 
-- minor release.
+## 1.20.0
+
+- **Focus cleanup — one product: the free GitHub App plus the `codesheriff`
+  CLI.** Removed the MCP stdio server (`codesheriff mcp`, setup-written
+  `.mcp.json` / `.cursor/mcp.json`), the unpublished VS Code and JetBrains
+  extensions, the hosted webhook worker/dashboard/compose/wrangler stack and
+  `docs/SELF_HOST.md`, the Terraform module, `docs/PRICING.md`,
+  `docs/ENTERPRISE.md`, and the competitive-parity commands `trex`,
+  `changestack`, `triage`, `learn`, `interact`, and `agent` (including the
+  `review --agent` JSONL emitter).
+- The reviewer capability matrix drops the VS Code, JetBrains, and
+  Terraform-provider rows (100 → 97 capabilities); standards and README synced.
+- GitHub App docs rewritten around a free, no-hosted-infrastructure install;
+  stale `pwoodman/the-code-sheriff` URLs corrected to `pwoodman/codesheriff`.
+
+## 1.19.0
+
+- **Competitive Parity: Greptile/CodeRabbit features**: Added T-Rex runtime validation (`codesheriff trex` — sandboxed test execution with log/screenshot/video evidence capture), PR triage scoring (`codesheriff triage` — deterministic P0-P3 ranking for PR flood management), Change Stack visualization (layer-by-layer diff walkthrough in `codesheriff changestack` and the HTML report), and the feedback learning loop (`codesheriff learn` — 👍/👎 history, suppression durability metric, auto-suppression of repeatedly-dismissed findings).
+- **Open benchmark registration**: `withmartian/code-review-benchmark` and AACR-Bench registered as external validation suites, surfaced in `codesheriff eval --suite validation` scorecards.
+- **UX & Agent Empowerment**: Added `codesheriff status` for quick project health overview, `codesheriff agent` for unified agent interface (context, findings, next action, apply, prompt, loop), `codesheriff hooks` for managing git hooks and automations, and `codesheriff interact` for slash-command mode.
+- **MCP Expansion**: Added `codesheriff_status`, `codesheriff_hooks`, `codesheriff_agent`, and `codesheriff_interact` MCP tools for AI agents.
+- **Doctor Diagnostics**: `codesheriff doctor` now includes hook status, agent integration detection, and automation discovery.
+- **Shared Status Payloads**: New `quality_gates.status_payload` module shared across CLI, MCP, and agent tools.
 
 ## 1.17.1
 

@@ -3,7 +3,7 @@
 ## Five-minute setup
 
 ```bash
-uvx --from git+https://github.com/pwoodman/codesheriff.git quality setup
+uvx codesheriff setup
 ```
 
 Run it from the repository you want to protect. The command detects the
@@ -15,10 +15,12 @@ request. You do not need a GitHub App.
 The only files required for GitHub are:
 
 ```text
-quality.toml
+sheriff.toml
 .github/workflows/quality.yml
-.quality-baseline.json
+.sheriff-baseline.json
 ```
+
+(`quality.toml` / `.quality-baseline.json` still work as legacy aliases; `codesheriff migrate` renames them.)
 
 Hooks and coding-agent integrations are optional local conveniences. Use
 `quality setup --no-hooks --no-agents` when you want the smallest possible
@@ -69,7 +71,7 @@ than silently passing.
 Share this poster: [getting-started.png](getting-started.png)
 ([HTML source](getting-started.html) if you want to print or tweak it).
 
-Coding agents get MCP + Cursor/Claude/Copilot/Gemini instruction files that
+Coding agents get Cursor/Claude/Copilot/Gemini instruction files that
 loop on `quality fix` then `quality oracle --run --prompt` until
 `certificate.ready`. `quality merge` dry-merges vs main. Unresolved GitHub
 review comments stay in the oracle. `quality setup --auto-merge` turns on

@@ -7,7 +7,6 @@ import pytest
 
 from quality_gates.config import QualityConfig, load_config
 from quality_gates.github_comment import post_review
-from quality_gates.mcp_server import handle
 from quality_gates.models import Finding, GateResult
 from quality_gates.oracle import remaining_from_results, render_prompt
 from quality_gates.review.engine import run_review
@@ -564,39 +563,6 @@ def test_oracle_prompt_lists_blockers() -> None:
     assert "a.py:3" in prompt
     assert "codesheriff oracle --run" in prompt
     assert "why:" in prompt or "E001" in prompt
-
-
-def test_mcp_lists_and_calls_oracle(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("quality_gates.mcp_server._root", lambda: tmp_path)
-    listed = handle(
-        {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, runner=lambda _a: 0
-    )
-    assert listed is not None
-    names = {tool["name"] for tool in listed["result"]["tools"]}
-    assert {
-        "codesheriff_oracle",
-        "codesheriff_run",
-        "codesheriff_review",
-        "codesheriff_finding_context",
-        "codesheriff_apply_fix",
-        "codesheriff_merge",
-        "codesheriff_pr_comments",
-        "codesheriff_fix",
-        "codesheriff_certify",
-    } <= names
-    called = handle(
-        {
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/call",
-            "params": {"name": "codesheriff_oracle", "arguments": {}},
-        },
-        runner=lambda _a: 0,
-    )
-    assert called is not None
-    text = called["result"]["content"][0]["text"]
-    payload = json.loads(text)
-    assert "green" in payload
 
 
 def test_post_review_writes_inline_and_check_run(monkeypatch) -> None:

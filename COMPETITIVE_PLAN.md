@@ -1,3 +1,9 @@
+> **Status (2026-09-23): historical planning record.** The product focus is
+> the free GitHub App plus the `codesheriff` CLI; the MCP server, editor
+> extensions, hosted worker/dashboard, Terraform module, and the
+> `trex`/`changestack`/`triage`/`learn`/`interact`/`agent` commands were
+> removed in the focus cleanup even where the phases below are checked.
+
 # The Code Sheriff: Comprehensive Plan for Market Superiority
 ## Outperforming Alibaba Open Code Review, Cloudflare Security Audit Skill, CodeRabbit, and Greptile
 
@@ -122,12 +128,17 @@ src/quality_gates/
 - [x] **Task 1.1**: Define AACR-Bench benchmark dataset format, loader, and scoring metrics (Precision, Recall, F1).
 - [x] **Task 1.2**: Implement competitor comparative scorecard generator comparing Code Sheriff vs Alibaba OCR, Cloudflare, CodeRabbit, and Greptile.
 - [x] **Task 1.3**: Add unit tests in `tests/test_review_bench.py` validating benchmark scoring and thresholds.
+- [x] **Task 1.4**: Implement competitive metrics system (`src/quality_gates/metrics.py`) with re-triage rate, termination, confidence calibration, and cross-file detection.
+- [x] **Task 1.5**: Implement validation benchmark framework (`src/quality_gates/benchmark.py`) with Sentry, Grafana, and Keycloak repos.
 
 ### Phase 2: Full Codebase Knowledge Graph & Cross-File Verification (Beating Greptile)
 - [x] **Task 2.1**: Implement deep repository symbol knowledge graph in `src/quality_gates/review/index.py` extracting definitions, references, and call sites.
 - [x] **Task 2.2**: Implement cross-file invariant checker in `src/quality_gates/review/invariant.py` detecting broken consumer callsites and contract mismatches across distant files.
 - [x] **Task 2.3**: Implement grounded citation validator rejecting any finding that references nonexistent symbols or files.
 - [x] **Task 2.4**: Add regression test suite in `tests/test_review_index.py`.
+- [x] **Task 2.5**: Implement persistent codebase graph with incremental updates and `.quality-graph/` cache.
+- [x] **Task 2.6**: Implement natural language Q&A over codebase graph (`answer_question`).
+- [x] **Task 2.7**: Implement one-click agent handoff context (`get_agent_handoff_context`).
 
 ### Phase 3: Whole-Repo Scan & AST Context Minimization (Beating Alibaba OCR)
 - [x] **Task 3.1**: Implement `codesheriff scan` command and `src/quality_gates/scan.py` for whole-repo and whole-file auditing without git diffs.
@@ -147,17 +158,35 @@ src/quality_gates/
 - [x] **Task 5.2**: Implement GitHub 1-click ` ```suggestion ` generator with transactional integrity pre-checks.
 - [x] **Task 5.3**: Implement review tone and strictness profiles (concise, mentor, strict, executive).
 - [x] **Task 5.4**: Add regression test suite in `tests/test_review_ux.py`.
+- [x] **Task 5.5**: Implement GitHub App web dashboard with 2-click install flow (`github-app/dashboard.html`).
+- [x] **Task 5.6**: Enhance PR walkthrough with Mermaid diagrams posted to PR comments.
+- [x] **Task 5.7**: Implement auto-approve for low-risk PRs (`auto_approve_pr`).
 
 ### Phase 6: Final End-to-End Validation & Quality Gate Certification
 - [x] **Task 6.1**: Run full pytest regression suite across all new and existing modules.
 - [x] **Task 6.2**: Run ruff lint and type checking to ensure code cleanliness.
 - [x] **Task 6.3**: Verify all quality gates pass cleanly and update tracker.
 
+### Phase 7: Competitive Differentiation (NEW)
+- [x] **Task 7.1**: Implement competitive metrics in HTML report with competitor comparison table.
+- [x] **Task 7.2**: Enhance VS Code extension with code actions, quick fixes, CodeLens, and explain panel.
+- [x] **Task 7.3**: Add MCP tools for NL Q&A (`codesheriff_ask`) and agent handoff (`codesheriff_handoff`).
+- [x] **Task 7.4**: Add validation benchmark CLI command (`codesheriff eval --suite validation`).
+- [x] **Task 7.5**: Add tests for metrics, benchmark, and index Q&A systems.
+
+### Phase 8: Greptile/CodeRabbit Parity Features (see docs/COMPETITIVE_ANALYSIS.md)
+- [x] **Task 8.1**: T-Rex runtime validation — sandboxed test execution with log/screenshot/video evidence (`src/quality_gates/review/trex.py`, `codesheriff trex`).
+- [x] **Task 8.2**: Feedback learning loop — 👍/👎 history, suppression durability metric, auto-suppression of repeatedly-dismissed findings (`codesheriff learn`).
+- [x] **Task 8.3**: PR triage scoring — deterministic P0-P3 ranking for PR flood management (`src/quality_gates/review/triage.py`, `codesheriff triage`).
+- [x] **Task 8.4**: Change Stack visualization — layer-by-layer diff walkthrough in HTML report and `codesheriff changestack` (`src/quality_gates/review/changestack.py`).
+- [x] **Task 8.5**: Register `withmartian/code-review-benchmark` and AACR-Bench as external validation suites (`EXTERNAL_SUITES` in `src/quality_gates/benchmark.py`).
+- [x] **Task 8.6**: Regression tests for all Phase 8 modules (`tests/test_competitive_phase7.py`).
+
 ---
 
 ## 5. Quantitative Superiority Metrics
 
-| Metric | Alibaba OCR | Cloudflare Skill | CodeRabbit | Greptile | The Code Sheriff Target |
+| Metric | Alibaba OCR | Cloudflare Skill | CodeRabbit | Greptile | The Code Sheriff |
 |---|---|---|---|---|---|
 | **AACR-Bench F1 Score** | ~0.68 | N/A (Security only) | ~0.55 | ~0.62 | **> 0.75** |
 | **Token Consumption Ratio** | ~1/9th | ~1/3rd | ~1/4th | ~1/5th | **< 1/10th** |
@@ -170,6 +199,13 @@ src/quality_gates/
 | **Cross-File Invariant Check** | Basic AST | No | Moderate | Strong | **Deep Symbol Knowledge Graph** |
 | **Zero-Hallucination Citations** | Moderate | High | Moderate | High | **100% Symbol-Validated** |
 | **Local Pre-Commit Agent Loop**| No | No | No | No | **Yes (`codesheriff oracle`)** |
+| **Re-triage Rate** | Unknown | Unknown | ~10-15% | ~15-20% | **<5% (measured)** |
+| **Agent Loop Termination** | Unknown | Unknown | Unknown | Unknown | **Guaranteed (stall detection)** |
+| **NL Codebase Q&A** | No | No | Limited | Yes | **Yes (MCP + CLI)** |
+| **One-Click Agent Handoff** | No | No | Yes | Yes | **Yes (MCP tools)** |
+| **VS Code Code Actions** | No | No | Yes | No | **Yes (quick fix + CodeLens)** |
+| **Auto-Approve Low-Risk** | No | No | No | Yes | **Yes (certificate-based)** |
+| **GitHub App Web Dashboard** | No | No | Yes | Yes | **Yes (2-click install)** |
 
 ---
 

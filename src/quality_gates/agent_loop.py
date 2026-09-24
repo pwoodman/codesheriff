@@ -2,26 +2,16 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 LOOP_MARKER = "codesheriff:agent-loop"
-
-MCP_CONFIG = {
-    "mcpServers": {
-        "codesheriff": {
-            "command": "codesheriff",
-            "args": ["mcp"],
-        }
-    }
-}
 
 LOOP_BODY = """Chat is not proof. After edits, loop until the oracle is green and
 `certificate.ready` is true:
 
 1. `codesheriff fix` (format / safe lint autofix / finding patches)
-2. `codesheriff oracle --run --prompt` (or MCP `codesheriff_run` then `codesheriff_oracle`)
-3. Do **only** the playbook `next` action (`codesheriff_finding_context` / `codesheriff_apply_fix`)
+2. `codesheriff oracle --run --prompt`
+3. Do **only** the playbook `next` action (`codesheriff why` / `codesheriff apply`)
 4. Re-run until `green` is true and `certificate.auto_merge` is `ready`
 5. If `codesheriff merge` reports textual-conflict, rebase onto the base branch
 6. Unresolved GitHub review comments are remaining work
@@ -46,7 +36,7 @@ alwaysApply: true
 
 SKILL_MD = f"""---
 name: the-code-sheriff
-description: Run The Code Sheriff quality gates and iterate until the oracle is green. Use when finishing a change, before commit or PR, when lint/security/review fails, or when the user mentions quality, sheriff, gates, MCP, or vibe-coding quality.
+description: Run The Code Sheriff quality gates and iterate until the oracle is green. Use when finishing a change, before commit or PR, when lint/security/review fails, or when the user mentions quality, sheriff, gates, or vibe-coding quality.
 ---
 
 <!-- {LOOP_MARKER} -->
@@ -65,10 +55,8 @@ codesheriff oracle --run
 codesheriff certify
 ```
 
-Or MCP: `codesheriff_fix` → `codesheriff_run` → `codesheriff_oracle` →
-`codesheriff_finding_context` / `codesheriff_apply_fix` → `codesheriff_certify`
-until `green` and `certificate.ready` are true. `codesheriff_merge` dry-merges
-into main; `codesheriff_pr_comments` lists unresolved review threads.
+Loop until `green` and `certificate.ready` are true. `codesheriff merge`
+dry-merges into main; `codesheriff comments` lists unresolved review threads.
 
 ## Rules
 
@@ -120,10 +108,7 @@ Write code that a human and an agent can safely auto-merge.
 
 def write_agent_integrations(root: Path, *, force: bool = False) -> list[str]:
     notes: list[str] = []
-    mcp_json = json.dumps(MCP_CONFIG, indent=2) + "\n"
     files = (
-        (root / ".cursor" / "mcp.json", mcp_json),
-        (root / ".mcp.json", mcp_json),
         (root / ".cursor" / "rules" / "the-code-sheriff.mdc", CURSOR_RULE),
         (root / ".cursor" / "skills" / "the-code-sheriff" / "SKILL.md", SKILL_MD),
         (root / ".claude" / "skills" / "the-code-sheriff" / "SKILL.md", SKILL_MD),

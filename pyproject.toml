@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "quality-gates"
-version = "1.18.0"
+name = "codesheriff"
+version = "1.20.0"
 description = "The Code Sheriff: polyglot quality gates for every change."
 readme = "README.md"
 requires-python = ">=3.11"

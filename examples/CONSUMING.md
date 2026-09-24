@@ -14,11 +14,11 @@ See [`consumer-cli.yml`](consumer-cli.yml). On Actions, `quality run` is cheap.
 On your machine:
 
 ```bash
-uvx --from git+https://github.com/pwoodman/the-code-sheriff.git quality setup
+uvx --from git+https://github.com/pwoodman/codesheriff.git codesheriff setup
 ```
 
-Coding agents can loop on `quality fix` then `quality oracle --run --prompt`
-(or `quality mcp`) until `green` and `certificate.ready`. `quality setup`
+Coding agents can loop on `codesheriff fix` then
+`codesheriff oracle --run --prompt` until `green` and `certificate.ready`. `quality setup`
 writes Cursor/Claude/Copilot/Gemini instruction files and
 `.quality/rules/clean-code.md` by default. The same `AGENTS.md` /
 `.cursor/rules` the agent reads are enforced as review rules. `quality merge`

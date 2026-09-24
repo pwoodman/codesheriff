@@ -1,23 +1,24 @@
 ---
-description: Treat The Code Sheriff as the merge oracle. Run quality gates before claiming work is done.
+description: Treat The Code Sheriff as the merge oracle. Run CodeSheriff before claiming work is done.
 alwaysApply: true
 ---
 
-<!-- the-code-sheriff:agent-loop -->
+<!-- codesheriff:agent-loop -->
 
 # The Code Sheriff
 
 Chat is not proof. After edits, loop until the oracle is green and
 `certificate.ready` is true:
 
-1. `quality fix` (format / safe lint autofix / finding patches)
-2. `quality oracle --run --prompt` (or MCP `quality_run` then `quality_oracle`)
-3. Do **only** the playbook `next` action (`quality_finding_context` / `quality_apply_fix`)
+1. `codesheriff fix` (format / safe lint autofix / finding patches)
+2. `codesheriff oracle --run --prompt`
+3. Do **only** the playbook `next` action (`codesheriff why` / `codesheriff apply`)
 4. Re-run until `green` is true and `certificate.auto_merge` is `ready`
-5. If `quality merge` reports textual-conflict, rebase onto the base branch
+5. If `codesheriff merge` reports textual-conflict, rebase onto the base branch
 6. Unresolved GitHub review comments are remaining work
 7. Only then commit, open a PR, or auto-merge
 
-Custom standards: `.quality/rules/*.md`. `AGENTS.md`, `CLAUDE.md`,
+Custom standards: `.sheriff/rules/*.md`. `AGENTS.md`, `CLAUDE.md`,
 `.github/copilot-instructions.md`, and `.cursor/rules` are enforced as review
 rules automatically.
+

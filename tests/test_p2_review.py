@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 from quality_gates.models import Finding, GateResult
 from quality_gates.report import build_digest, render_html
 from quality_gates.review import bench as bench_mod
@@ -14,11 +11,6 @@ from quality_gates.review.gitlab import (
     gitlab_env_present,
     maybe_post_gitlab_review,
     post_gitlab_review,
-)
-from quality_gates.review.learning import (
-    apply_feedback,
-    load_thumbs,
-    review_learn_hook,
 )
 
 
@@ -127,54 +119,6 @@ def test_heuristic_suite_reports_sheriff_score() -> None:
     assert "sheriff_score_inputs" in suite
     assert 0.0 <= suite["sheriff_score"] <= 1.0
     assert suite["sheriff_score_inputs"]["p50_s"] == 0.0
-
-
-# --- learning: thumbs boost/penalty -----------------------------------------
-
-
-def test_load_thumbs_normalises_votes(tmp_path: Path) -> None:
-    path = tmp_path / "thumbs.json"
-    path.write_text(
-        json.dumps({"a|b|1": 5, "c|d|2": -2, "zero": 0, "junk": "x", "": 1}),
-        encoding="utf-8",
-    )
-    assert load_thumbs(path) == {"a|b|1": 1, "c|d|2": -1}
-    assert load_thumbs(tmp_path / "missing.json") == {}
-    broken = tmp_path / "broken.json"
-    broken.write_text("{nope", encoding="utf-8")
-    assert load_thumbs(broken) == {}
-
-
-def test_learning_boost_and_penalty() -> None:
-    good = _finding(confidence="0.5")
-    bad = _finding(path="src/other.py", confidence="0.5")
-    other = _finding(path="src/third.py", confidence="0.5")
-    from quality_gates.review.parse import fingerprint
-
-    thumbs = {
-        fingerprint(good, bucket=1): 1,
-        fingerprint(bad, bucket=1): -1,
-    }
-    apply_feedback([good, bad, other], thumbs)
-    assert float(good.confidence) > 0.5
-    assert float(bad.confidence) < 0.5
-    assert float(other.confidence) == 0.5
-
-
-def test_review_learn_hook_reads_thumbs_file(tmp_path: Path, monkeypatch) -> None:
-    report_dir = tmp_path / ".quality-reports"
-    report_dir.mkdir()
-    target = _finding(confidence="0.5")
-    from quality_gates.review.parse import fingerprint
-
-    (report_dir / "thumbs.json").write_text(
-        json.dumps({fingerprint(target, bucket=1): 1}), encoding="utf-8"
-    )
-    monkeypatch.chdir(tmp_path)
-    result = review_learn_hook(tmp_path, findings=[target])
-    assert result["boosted"] == 1
-    assert result["applied"] == 1
-    assert float(target.confidence) > 0.5
 
 
 # --- gitlab stub: never crashes ----------------------------------------------

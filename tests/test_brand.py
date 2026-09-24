@@ -224,14 +224,19 @@ def _capture(fn) -> str:
     return buffer.getvalue()
 
 
-def test_agent_loop_writes_mcp_and_loop_files(tmp_path: Path) -> None:
+def test_agent_loop_writes_loop_files(tmp_path: Path) -> None:
     """The agent-loop surfaces are the contract that keeps agents on the oracle."""
     written = write_agent_integrations(tmp_path)
     assert written
-    mcp = (tmp_path / ".cursor" / "mcp.json").read_text(encoding="utf-8")
-    assert "codesheriff" in mcp
     rule = (tmp_path / ".cursor" / "rules" / "the-code-sheriff.mdc").read_text(
         encoding="utf-8"
     )
     assert "codesheriff:agent-loop" in rule
     assert "codesheriff oracle" in rule
+    skill = (
+        tmp_path / ".cursor" / "skills" / "the-code-sheriff" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert "codesheriff oracle" in skill
+    assert "certificate" in skill
+    assert not (tmp_path / ".cursor" / "mcp.json").exists()
+    assert not (tmp_path / ".mcp.json").exists()

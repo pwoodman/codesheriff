@@ -125,14 +125,13 @@ def test_setup_writes_hooks(tmp_path: Path, monkeypatch) -> None:
     assert init_repo(tmp_path, hooks=True) == 0
     text = (tmp_path / ".pre-commit-config.yaml").read_text(encoding="utf-8")
     assert PIN in text
-    assert "quality-format" in text
+    assert "sheriff-format" in text
 
 
 def test_init_does_not_write_hooks(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("quality_gates.onboard.resolve_pin", lambda *a, **k: PIN)
     assert main(["--root", str(tmp_path), "init", "--no-require-check"]) == 0
     assert not (tmp_path / ".pre-commit-config.yaml").exists()
-    assert not (tmp_path / ".cursor" / "mcp.json").exists()
 
 
 def test_setup_writes_agent_loop_files(tmp_path: Path, monkeypatch) -> None:
@@ -144,9 +143,6 @@ def test_setup_writes_agent_loop_files(tmp_path: Path, monkeypatch) -> None:
     from quality_gates.onboard import init_repo
 
     assert init_repo(tmp_path, hooks=True, agents=True) == 0
-    mcp = (tmp_path / ".cursor" / "mcp.json").read_text(encoding="utf-8")
-    assert '"codesheriff"' in mcp
-    assert "mcp" in mcp
     rule = (tmp_path / ".cursor" / "rules" / "the-code-sheriff.mdc").read_text(
         encoding="utf-8"
     )
@@ -154,10 +150,9 @@ def test_setup_writes_agent_loop_files(tmp_path: Path, monkeypatch) -> None:
     skill = (
         tmp_path / ".cursor" / "skills" / "the-code-sheriff" / "SKILL.md"
     ).read_text(encoding="utf-8")
-    assert "codesheriff_oracle" in skill
-    assert "codesheriff_merge" in skill
-    assert "codesheriff_pr_comments" in skill
-    assert (tmp_path / ".mcp.json").is_file()
+    assert "codesheriff oracle" in skill
+    assert "codesheriff merge" in skill
+    assert "codesheriff comments" in skill
     assert (tmp_path / "AGENTS.md").is_file()
     assert (tmp_path / "CLAUDE.md").is_file()
     assert (tmp_path / ".github" / "copilot-instructions.md").is_file()
