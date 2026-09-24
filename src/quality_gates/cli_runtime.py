@@ -104,30 +104,15 @@ def _certify(
 
 
 def _apply_one(root: Path, finding_id: str | None, *, as_json: bool) -> int:
-    from quality_gates.models import Finding
-    from quality_gates.oracle import finding_from_reports
-    from quality_gates.review.apply import apply_and_verify
+    from quality_gates.review.apply import apply_reported_finding
 
-    packed = finding_from_reports(root, finding_id)
-    row = packed.get("finding")
-    if not isinstance(row, dict):
+    row, verified = apply_reported_finding(root, finding_id)
+    if row is None:
         if as_json:
-            print(json.dumps(packed, indent=2))
+            print(json.dumps(verified, indent=2))
         else:
-            print(packed.get("error") or "no finding")
+            print(verified.get("error") or "no finding")
         return 1
-    finding = Finding(
-        gate=str(row.get("gate") or "review"),
-        message=str(row.get("message") or ""),
-        path=row.get("path"),
-        line=row.get("line") if isinstance(row.get("line"), int) else None,
-        rule=row.get("rule"),
-        patch=row.get("patch"),
-        suggestion=row.get("suggestion"),
-        verify=row.get("verify"),
-    )
-    verified = apply_and_verify(root, finding)
-    verified["id"] = row.get("id")
     if as_json:
         print(json.dumps(verified, indent=2))
     else:
@@ -450,11 +435,7 @@ def _onboard(root: Path, args: argparse.Namespace) -> int:
             print("Include .pre-commit-config.yaml if it was just written.")
         if getattr(args, "agents", False):
             print(
-                "Include .cursor/mcp.json, .mcp.json, "
-                ".cursor/rules/the-code-sheriff.mdc, and the Code Sheriff skill."
-            )
-            print(
-                "Put `quality` on PATH (`uv tool install git+https://github.com/pwoodman/the-code-sheriff.git`) so MCP can spawn."
+                "Include .cursor/rules/the-code-sheriff.mdc and the Code Sheriff skill."
             )
         if getattr(args, "auto_merge", False):
             print("GitHub auto-merge: land PRs when `codesheriff certify` is ready.")

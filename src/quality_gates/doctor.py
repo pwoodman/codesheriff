@@ -141,6 +141,9 @@ def build_payload(
     missing_optional = [
         str(row["tool"]) for row in rows if not row["required"] and not row["ok"]
     ]
+    hooks = _doctor_hooks(root)
+    agents = _doctor_agents(root)
+    automations = _doctor_automations(root)
     return {
         "platform": platform_id(),
         "cache": str(cache_dir()),
@@ -150,6 +153,9 @@ def build_payload(
         "tools": rows,
         "missing_required": missing_required,
         "missing_optional": missing_optional,
+        "hooks": hooks,
+        "agents": agents,
+        "automations": automations,
     }
 
 
@@ -170,8 +176,32 @@ def render_console(
         extra = row["version"] or row["path"] or "not on PATH"
         print(f"  {row['tool']:<{width}}  {mark:<8}  {requirement:<8}  {extra}")
     print(
-        "\nTip: codesheriff doctor --install downloads gitleaks, osv-scanner, golangci-lint, and Java jars."
+        "\nTip: codesheriff doctor --install (alias --fix) downloads gitleaks,"
+        " osv-scanner, golangci-lint, and JS tooling.\n"
+        "Other toolchains: use your platform package manager or project bundle.\n"
+        "Missing tools report skip, never pass. Untrusted clones: use\n"
+        "QUALITY_TRUST=untrusted and skip test/compile/coverage/ui (see docs/BETA_TESTING.md)."
     )
+    hooks = payload.get("hooks") or {}
+    if hooks.get("precommit") or hooks.get("git_hooks"):
+        print("\nHooks:")
+        for hk, hv in hooks.items():
+            if isinstance(hv, dict):
+                status = hv.get("status", "unknown")
+                print(f"  {hk}: {status}")
+            elif isinstance(hv, list):
+                for h in hv:
+                    print(f"  {h.get('type', h)}: {h.get('status', 'unknown')}")
+    agents = payload.get("agents") or []
+    if agents:
+        print("\nAgent integrations:")
+        for a in agents:
+            print(f"  {a}")
+    automations = payload.get("automations") or []
+    if automations:
+        print("\nAutomations:")
+        for a in automations:
+            print(f"  {a.get('trigger', 'unknown')}: {a.get('status', 'unknown')}")
 
 
 def doctor(root: Path, config: QualityConfig, *, install: bool, as_json: bool) -> int:
@@ -201,3 +231,58 @@ def _install_all() -> None:
             loader()
         except (OSError, RuntimeError) as exc:
             print(f"warning: {loader.__name__} failed: {exc}", file=sys.stderr)
+
+
+def _doctor_hooks(root: Path) -> dict:
+    hooks: dict = {}
+    precommit = root / ".pre-commit-config.yaml"
+    hooks_dir = root / ".git" / "hooks"
+
+    if precommit.is_file():
+        hooks["precommit"] = {
+            "file": str(precommit),
+            "status": "configured",
+        }
+        if (hooks_dir / "pre-commit").exists():
+            hooks["precommit"]["status"] = "active"
+
+    if hooks_dir.is_dir():
+        git_hooks = []
+        for hook_file in ["pre-commit", "pre-push", "commit-msg"]:
+            hook_path = hooks_dir / hook_file
+            if hook_path.exists():
+                git_hooks.append({"type": hook_file, "status": "active"})
+        if git_hooks:
+            hooks["git_hooks"] = git_hooks
+
+    return hooks
+
+
+def _doctor_agents(root: Path) -> list[str]:
+    agents: list[str] = []
+    for p in [
+        root / "AGENTS.md",
+        root / ".cursor" / "rules" / "the-code-sheriff.mdc",
+        root / ".claude" / "skills" / "the-code-sheriff" / "SKILL.md",
+        root / ".github" / "copilot-instructions.md",
+    ]:
+        if p.exists():
+            agents.append(str(p.relative_to(root)))
+    return agents
+
+
+def _doctor_automations(root: Path) -> list[dict]:
+    automations: list[dict] = []
+    workflow_dir = root / ".github" / "workflows"
+    if workflow_dir.is_dir():
+        for wf in workflow_dir.glob("*.yml"):
+            text = wf.read_text(encoding="utf-8", errors="ignore")
+            if "sheriff" in text.lower() or "quality" in text.lower():
+                automations.append(
+                    {
+                        "trigger": "github-action",
+                        "file": wf.name,
+                        "status": "configured",
+                    }
+                )
+    return automations

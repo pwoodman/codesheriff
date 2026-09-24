@@ -1,3 +1,9 @@
+> **Status (2026-09-23): historical planning record.** The product focus is
+> the free GitHub App plus the `codesheriff` CLI; the MCP server, editor
+> extensions, hosted worker/dashboard, Terraform module, and the
+> `trex`/`changestack`/`triage`/`learn`/`interact`/`agent` commands were
+> removed in the focus cleanup even where the phases below are checked.
+
 # The Code Sheriff: Comprehensive Plan for Market Superiority
 ## Outperforming Alibaba Open Code Review, Cloudflare Security Audit Skill, CodeRabbit, and Greptile
 
@@ -167,6 +173,14 @@ src/quality_gates/
 - [x] **Task 7.3**: Add MCP tools for NL Q&A (`codesheriff_ask`) and agent handoff (`codesheriff_handoff`).
 - [x] **Task 7.4**: Add validation benchmark CLI command (`codesheriff eval --suite validation`).
 - [x] **Task 7.5**: Add tests for metrics, benchmark, and index Q&A systems.
+
+### Phase 8: Greptile/CodeRabbit Parity Features (see docs/COMPETITIVE_ANALYSIS.md)
+- [x] **Task 8.1**: T-Rex runtime validation — sandboxed test execution with log/screenshot/video evidence (`src/quality_gates/review/trex.py`, `codesheriff trex`).
+- [x] **Task 8.2**: Feedback learning loop — 👍/👎 history, suppression durability metric, auto-suppression of repeatedly-dismissed findings (`codesheriff learn`).
+- [x] **Task 8.3**: PR triage scoring — deterministic P0-P3 ranking for PR flood management (`src/quality_gates/review/triage.py`, `codesheriff triage`).
+- [x] **Task 8.4**: Change Stack visualization — layer-by-layer diff walkthrough in HTML report and `codesheriff changestack` (`src/quality_gates/review/changestack.py`).
+- [x] **Task 8.5**: Register `withmartian/code-review-benchmark` and AACR-Bench as external validation suites (`EXTERNAL_SUITES` in `src/quality_gates/benchmark.py`).
+- [x] **Task 8.6**: Regression tests for all Phase 8 modules (`tests/test_competitive_phase7.py`).
 
 ---
 

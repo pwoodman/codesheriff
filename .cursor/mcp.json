@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "the-code-sheriff": {
-      "command": "quality",
-      "args": ["mcp"]
-    }
-  }
-}

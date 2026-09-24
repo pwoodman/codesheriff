@@ -1,5 +1,5 @@
-name: Bootstrap quality-gates
-description: Install the quality CLI from this checkout and optional pinned binaries.
+name: Bootstrap codesheriff
+description: Install the Code Sheriff CLI from this checkout and optional pinned binaries.
 inputs:
   install-binaries:
     description: Download gitleaks, osv-scanner, golangci-lint, and Java jars
@@ -12,7 +12,7 @@ runs:
       with:
         python-version: "3.12"
 
-    - name: Install quality-gates CLI
+    - name: Install The Code Sheriff CLI
       shell: bash
       run: |
         set -euo pipefail
@@ -24,4 +24,4 @@ runs:
       shell: bash
       env:
         QUALITY_GATES_AUTO_INSTALL: "1"
-      run: quality doctor --install
+      run: codesheriff doctor --install

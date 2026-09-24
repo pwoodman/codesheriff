@@ -15,9 +15,9 @@ OWASP Top 10 / CWE ids and steps of reproduction.
 | SBOM | Trivy CycloneDX/SPDX, or lockfile inventory | `.quality-reports/sbom.cdx.json` and `sbom.spdx.json` (`quality sbom`) |
 | Heuristic | The Code Sheriff itself | assignment-shaped secrets in source if gitleaks is missing |
 
-Semgrep is optional (`pip install semgrep` or `pip install 'quality-gates[security]'`).
+Semgrep is optional (`pip install semgrep` or `pip install 'codesheriff[security]'`).
 Checkov is optional and used when present. gitleaks and osv-scanner are
-downloaded to `~/.cache/quality-gates/bin` on CI (`quality doctor --install`,
+downloaded to `~/.cache/codesheriff/bin` on CI (`codesheriff doctor --install`,
 or automatically when `GITHUB_ACTIONS=true`). Trivy is used when installed for
 CVE, IaC, secrets, and SBOM.
 

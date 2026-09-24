@@ -124,12 +124,10 @@ quality oracle --run
 quality certify
 ```
 
-`quality mcp` exposes `quality_oracle`, `quality_run`, `quality_review`,
-`quality_merge`, `quality_pr_comments`, `quality_finding_context`,
-`quality_apply_fix`, `quality_fix`, and `quality_certify` over MCP stdio so
-Cursor, Claude Code, Copilot, Codex, OpenCode, Qwen, and VS Code can iterate
-until `green` and `certificate.ready` are true. The oracle playbook lists one
-Next action (autofix first). `quality merge` dry-merges into the base branch.
+Cursor, Claude Code, Copilot, Codex, OpenCode, and Qwen iterate until
+`green` and `certificate.ready` are true by looping on the same CLI:
+`quality fix` → `quality oracle --run --prompt` → do the one Next action →
+re-run. The oracle playbook lists one Next action (autofix first). `quality merge` dry-merges into the base branch.
 Unresolved GitHub review threads (Greptile, BugBot, humans) are remaining
 oracle work.
 Inline GitHub comments include why / fix / verify and an apply-able suggestion

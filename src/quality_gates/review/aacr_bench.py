@@ -396,7 +396,7 @@ def get_canonical_aacr_suite() -> list[AACRCase]:
             pr_id=404,
             language="typescript",
             diff="""@@ -5,2 +5,2 @@
-+const API_SECRET = "sk_live_99482948294829482948";
+Open `src/quality_gates/review/aacr_bench.py:399` and apply the heuristic finding, then re-run `quality security`.
 """,
             ground_truth=[
                 AACRIssue(

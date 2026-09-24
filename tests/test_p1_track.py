@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 
@@ -121,40 +120,6 @@ def test_p1_light_flag_sets_budgets(tmp_path: Path, monkeypatch) -> None:
     assert seen["passes"] == 1
     assert seen["light"] is True
     assert seen["prove"] is True
-
-
-def test_p1_agent_jsonl(tmp_path: Path, monkeypatch, capsys) -> None:
-    from quality_gates import cli as cli_mod
-    from quality_gates.models import GateResult
-
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
-
-    def fake_run_review(root, config, languages, **kwargs):
-        return GateResult(
-            name="review",
-            status="pass",
-            findings=[
-                Finding(
-                    gate="review",
-                    severity="warning",
-                    path="app.py",
-                    line=1,
-                    rule="logic",
-                    message="check",
-                )
-            ],
-            notes=["provider: heuristic"],
-        )
-
-    monkeypatch.setattr(cli_mod, "run_review", fake_run_review)
-    code = cli_mod.main(["review", "--agent", "--base", "HEAD"])
-    assert code == 0
-    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
-    assert lines, "expected JSONL output"
-    events = [json.loads(line) for line in lines]
-    types = {event.get("type") for event in events}
-    assert {"review_context", "status", "finding", "complete"} <= types
 
 
 def test_p1_override_parse() -> None:

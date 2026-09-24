@@ -29,7 +29,6 @@ from quality_gates.platform import (
     notify_chat,
     rule_stats,
     simulate_rule,
-    terraform_schema,
 )
 from quality_gates.redact import redact_secrets
 from quality_gates.review.commands import help_text, parse_sheriff_command
@@ -77,11 +76,11 @@ from quality_gates.reviewer_coverage import (
 )
 
 
-def test_all_one_hundred_ids_are_present() -> None:
-    assert coverage_ids() == list(range(1, 101))
-    assert shipped_count() == 100
+def test_all_ninety_seven_ids_are_present() -> None:
+    assert coverage_ids() == list(range(1, 98))
+    assert shipped_count() == 97
     assert_complete()
-    assert {item.id for item in ITEMS} == set(range(1, 101))
+    assert {item.id for item in ITEMS} == set(range(1, 98))
 
 
 def test_native_app_events_permissions_and_install(monkeypatch) -> None:
@@ -279,7 +278,6 @@ def test_providers_fix_pr_platform_and_notes(tmp_path: Path, monkeypatch) -> Non
     export_evidence(tmp_path, framework="soc2")
     assert (tmp_path / ".quality-reports" / "evidence-soc2.json").is_file()
     assert map_github_role("admin") == "org admin"
-    assert terraform_schema()["resources"]
     assert (
         simulate_rule(["src/auth/a.py", "docs/a.md"], "src/auth/**")["matched_files"]
         == 1
@@ -299,22 +297,9 @@ def test_providers_fix_pr_platform_and_notes(tmp_path: Path, monkeypatch) -> Non
 
 def test_shipped_surfaces_exist() -> None:
     root = Path(__file__).resolve().parents[1]
-    assert (root / "editor" / "vscode" / "extension.js").is_file()
-    assert (
-        root
-        / "editor"
-        / "jetbrains"
-        / "src"
-        / "main"
-        / "resources"
-        / "META-INF"
-        / "plugin.xml"
-    ).is_file()
-    assert (root / "github-app" / "compose.yaml").is_file()
-    assert (root / "terraform" / "codesheriff" / "main.tf").is_file()
     assert (root / "standards" / "EVAL.md").is_file()
-    assert (root / "docs" / "PRICING.md").is_file()
-    assert (root / "docs" / "ENTERPRISE.md").is_file()
+    assert (root / "github-app" / "manifest.json").is_file()
+    assert (root / "docs" / "GITHUB_APP.md").is_file()
     packs = root / "configs" / "packs"
     for name in PACK_IDS:
         assert (packs / f"{name}.md").is_file(), name

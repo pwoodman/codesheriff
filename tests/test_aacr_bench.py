@@ -156,6 +156,13 @@ def test_run_aacr_evaluation(tmp_path: Path) -> None:
     assert scorecard_path.exists()
 
 
+def test_canonical_aacr_suite_not_empty() -> None:
+    from quality_gates.review.aacr_bench import get_canonical_aacr_suite
+
+    suite = get_canonical_aacr_suite()
+    assert len(suite) > 0
+
+
 def test_run_aacr_hard_evaluation(tmp_path: Path) -> None:
     from quality_gates.review.aacr_bench import (
         get_hard_aacr_suite,

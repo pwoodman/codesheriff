@@ -1,22 +1,28 @@
 # The Code Sheriff
 
+[![CI](https://github.com/pwoodman/codesheriff/actions/workflows/sheriff.yml/badge.svg)](https://github.com/pwoodman/codesheriff/actions)
+[![PyPI](https://img.shields.io/pypi/v/codesheriff)](https://pypi.org/project/codesheriff/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 Project home: https://github.com/pwoodman/codesheriff
 
 Polyglot **format → lint → DRY → security → compile → impact → coverage → audit → UI → version → merge → AI review**
 gates. CLI: `codesheriff`. The former `quality` command remains a warning-emitting
 compatibility alias. Heavy work defaults to **your machine**. GitHub Actions stays cheap unless
-you opt in. One command on a new repo:
+you opt in. One command on a new repo (see `docs/INSTALL.md` for pipx/Docker/Action options):
 
 ```bash
-uvx --from git+https://github.com/pwoodman/codesheriff.git codesheriff setup
+uvx codesheriff setup
 ```
 
-That also drops Cursor/Claude MCP, an always-on rule, and a skill so the agent
+That also drops an always-on rule and a skill so the agent
 loops on `codesheriff oracle` until green. `--no-agents` skips those files.
 
-The GitHub App is optional; see [`docs/GITHUB_APP.md`](docs/GITHUB_APP.md).
+**Free GitHub App**: install **The Code Sheriff** on any repository for a
+single required check — no hosted service, gates run on that repo's own
+Actions minutes. See [`docs/GITHUB_APP.md`](docs/GITHUB_APP.md).
 PR comment commands use the `/sheriff` prefix (`/sheriff review`, `/sheriff help`).
-The 100-item reviewer checklist is in [`standards/REVIEWER_COVERAGE.md`](standards/REVIEWER_COVERAGE.md).
+The 97-item reviewer checklist is in [`standards/REVIEWER_COVERAGE.md`](standards/REVIEWER_COVERAGE.md).
 
 | When | What | Where |
 | --- | --- | --- |
@@ -37,7 +43,7 @@ Sheriff sits **in the agent loop**, on your machine, before commit:
 
 ```bash
 codesheriff fix                     # format / safe lint / finding patches
-codesheriff oracle --run --prompt   # or MCP codesheriff_run → codesheriff_oracle
+codesheriff oracle --run --prompt   # prints the one Next action
 # do only the Next action (including merge conflicts and PR review comments)
 codesheriff oracle --run            # until green is true
 codesheriff certify                 # auto-merge ready when certificate.ready
@@ -53,8 +59,6 @@ humans) into the same oracle.
 
 | Surface | File |
 | --- | --- |
-| Cursor MCP | `.cursor/mcp.json` |
-| Claude Code / generic MCP | `.mcp.json` |
 | Always-on Cursor rule | `.cursor/rules/the-code-sheriff.mdc` |
 | Project skill | `.cursor/skills/the-code-sheriff/SKILL.md` and `.claude/skills/the-code-sheriff/SKILL.md` |
 | Agent readme (if missing) | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` |
@@ -71,7 +75,7 @@ The same files the agent already follows (`AGENTS.md`, `CLAUDE.md`,
 files **or** `.quality/rules/*.md` — one source of truth, no Confluence
 re-entry.
 
-Put `codesheriff` on PATH so MCP can spawn:
+Install `codesheriff` on PATH so every shell can run it:
 
 ```bash
 uv tool install git+https://github.com/pwoodman/codesheriff.git
@@ -181,67 +185,68 @@ For safe beta testing against disposable open-source clones, see [`docs/BETA_TES
 ## Configuration
 
 ```toml
-[quality]
+# sheriff.toml is preferred; quality.toml and [quality] still work (see codesheriff migrate).
+[sheriff]
 config_version = 1
 languages = ["auto"]
 fail_on = ["format", "lint", "dry", "security", "compile", "impact", "coverage", "audit", "ui", "version"]
 ai_review = "pr-only"
 policy = "adopt"                   # observe | adopt | enforce — see standards/POLICY.md
-baseline = ".quality-baseline.json"
+baseline = ".sheriff-baseline.json"
 trust = "trusted"                  # trusted | prompt | untrusted
 offline = false
 jobs = 4                             # bounded parallel profile adapters
 required_tools = []                # doctor fails when a listed tool is missing
 
-[quality.cache]
+[sheriff.cache]
 enabled = true                      # deterministic format/lint adapters only
 
-[quality.ci]
+[sheriff.ci]
 mode = "local"
 
-[quality.compile]
+[sheriff.compile]
 require_security = true
 
-[quality.coverage]
+[sheriff.coverage]
 line = 80                          # industry-standard statement-coverage floor
 branch = 0                         # 0 = do not enforce branch coverage
 tool = "auto"
 
-[quality.audit]
+[sheriff.audit]
 fail_on_priority = ["P0"]
 min_confidence = "HIGH"
 
-[quality.impact]
+[sheriff.impact]
 depth = 4
 require_downstream = true
 
-[quality.ui]
+[sheriff.ui]
 select = "changed"                 # changed | all
 framework = "auto"                 # auto | playwright | cypress
 on_github = false
 
-[quality.version]
+[sheriff.version]
 require_changelog = "if-present"   # if-present | always | never
 
-[quality.review]
+[sheriff.review]
 ingest_agent_files = true          # AGENTS.md, CLAUDE.md, .cursor/rules
 
-[quality.merge]
+[sheriff.merge]
 verify = "auto"                    # auto | always | never
 siblings = false
 
-[quality.comments]
+[sheriff.comments]
 in_oracle = true                   # unresolved GitHub threads stay in quality oracle
 fail = false                       # report only unless --fail / comments.fail = true
 
-[quality.sql]
+[sheriff.sql]
 dialect = "postgres"
 ```
 
 Project Prettier/ESLint/Ruff configs win over bundled files in `configs/`.
 `configs/quality.schema.json` describes the configuration representation.
 Unknown keys directly under `[quality]` are rejected. Gates never install
-tools; installation is only performed by an explicit `quality doctor --install`.
+tools; installation is only performed by an explicit `codesheriff doctor --install` (alias `--fix`).
 
 ### AI review
 
@@ -320,7 +325,6 @@ quality replay [run-id] [--last] [--list]
 quality suppress <finding-id> --reason "..." --owner you
 quality migrate
 quality eval [--suite reviewbench|sheriffbench|martian|macroscope|all] [--download] [--llm]
-quality mcp
 quality run [--only security,compile,impact,coverage,audit,ui] [--skip review] [--risk auto] [--full]
 quality report [--format console|markdown|html|json|sarif|junit] [--diff]
 quality watch [--interval 1.5]
@@ -379,7 +383,7 @@ AWS/GCP/Azure accounts — those are a different job.
 | AI PR review | inline comments, apply-able patches, OWASP/CWE, steps of reproduction |
 | PR summary | review posts a summary onto the pull request description |
 | IDE | `.quality-reports/diagnostics.json` problem matcher |
-| Auto-fix | suggestion fences, MCP `quality_apply_fix`, `quality oracle` |
+| Auto-fix | suggestion fences, `codesheriff apply`, `codesheriff oracle` |
 
 ## License
 

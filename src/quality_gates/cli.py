@@ -94,7 +94,6 @@ DEBUG_COMMANDS = frozenset(
         "detect",
         "doctor",
         "ignore",
-        "mcp",
         "packages",
         "regex",
         "serve",
@@ -202,7 +201,7 @@ def _add_onboard_args(
         "--agents",
         action=argparse.BooleanOptionalAction,
         default=agents,
-        help="write Cursor/Claude MCP, rule, and skill so agents loop on codesheriff oracle",
+        help="write Cursor/Claude rule and skill so agents loop on codesheriff oracle",
     )
     parser.add_argument(
         "--auto-merge",
@@ -232,9 +231,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "  fix        apply safe automatic remediations\n"
             "  oracle     remaining blockers + one Next action (agent loop)\n"
             "  status     quick project health overview\n"
-            "  agent      unified agent interface (context, findings, loop)\n"
             "  hooks      manage git hooks and automations\n"
-            "  interact   interactive slash-command mode\n"
             "  report     reprint the last run's scorecard\n"
             "  doctor     diagnose missing tools\n"
             "  certify    merge certificate (auto-merge readiness)\n"
@@ -273,6 +270,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     doctor_parser.add_argument(
         "--install", action="store_true", help="download pinned CI binaries"
     )
+    doctor_parser.add_argument("--fix", action="store_true", help="alias for --install")
     cache_p = sub.add_parser("cache", help="inspect or clean deterministic results")
     cache_p.add_argument(
         "action", choices=["status", "clean"], nargs="?", default="status"
@@ -430,11 +428,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="fast review: related_files=2, tool_rounds=1, passes=1, single LLM pass",
     )
-    review.add_argument(
-        "--agent",
-        action="store_true",
-        help="emit JSONL events (review_context,status,finding,complete) to stdout",
-    )
 
     eval_p = sub.add_parser(
         "eval",
@@ -488,16 +481,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--reset-stall",
         action="store_true",
         help="clear the repeated-next-action counter before evaluating",
-    )
-
-    sub.add_parser(
-        "mcp",
-        help=(
-            "MCP stdio server: codesheriff_oracle, codesheriff_run, "
-            "codesheriff_review, codesheriff_merge, codesheriff_pr_comments, "
-            "codesheriff_finding_context, codesheriff_apply_fix, "
-            "codesheriff_fix, codesheriff_certify"
-        ),
     )
 
     fix_p = sub.add_parser(
@@ -932,10 +915,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command in {"init", "setup"}:
         return _onboard(root, args)
-    if args.command == "mcp":
-        from quality_gates.mcp_server import serve
-
-        return serve()
     if args.command == "oracle":
         return _oracle(root, args)
     if args.command == "fix":
@@ -1041,7 +1020,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return _emit([result], root, config, args.json, ["review"])
     if args.command == "doctor":
-        return doctor(root, config, install=args.install, as_json=args.json)
+        install = bool(args.install or getattr(args, "fix", False))
+        return doctor(root, config, install=install, as_json=args.json)
     if args.command == "cache":
         if args.provenance and args.action == "status":
             from quality_gates.product import cache_provenance
@@ -1175,8 +1155,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             post=args.post,
             prove=bool(getattr(args, "prove", False)),
         )
-        if getattr(args, "agent", False):
-            return _emit_agent([result], root, config)
         return _emit([result], root, config, args.json, ["review"])
     if args.command == "ui":
         result = gate_runners.run_ui(
@@ -1493,76 +1471,6 @@ def _apply_pr_overrides(root: Path, config: QualityConfig) -> dict[str, object]:
     except (ValueError, TypeError, AttributeError):
         pass
     return overrides
-
-
-def _emit_agent(results, root: Path, config: QualityConfig) -> int:
-    """Emit JSONL agent events: review_context, status, finding, complete."""
-    from quality_gates.policy import apply_policy, maybe_comment_pr
-    from quality_gates.report import (
-        build_digest,
-        emit_annotations,
-        write_reports,
-    )
-
-    results, policy = apply_policy(results, root, config)
-    maybe_comment_pr(results, root, config, policy)
-    from contextlib import redirect_stdout
-
-    with redirect_stdout(sys.stderr):
-        emit_annotations(results)
-    digest = build_digest(
-        results, policy=policy, report_dir=root / ".quality-reports", root=root
-    )
-    from contextlib import suppress
-
-    with suppress(OSError, ValueError):
-        write_reports(digest, root / ".quality-reports", policy=policy)
-    review = next((item for item in results if item.name == "review"), None)
-    findings = review.findings if review is not None else []
-    status = review.status if review is not None else "pass"
-    notes = review.notes if review is not None else []
-    print(json.dumps({"type": "review_context", "status": status, "notes": notes[:8]}))
-    print(
-        json.dumps(
-            {
-                "type": "status",
-                "status": status,
-                "errors": (review.error_count() if review is not None else 0),
-                "warnings": (review.warning_count() if review is not None else 0),
-            }
-        )
-    )
-    for item in findings:
-        print(
-            json.dumps(
-                {
-                    "type": "finding",
-                    "severity": item.severity,
-                    "path": item.path,
-                    "line": item.line,
-                    "rule": item.rule,
-                    "message": item.message,
-                }
-            )
-        )
-    print(
-        json.dumps(
-            {
-                "type": "complete",
-                "status": status,
-                "verdict": digest.verdict,
-                "findings": len(findings),
-            }
-        )
-    )
-    fail_on = config.fail_on
-    failed = [
-        item
-        for item in results
-        if item.status == "fail"
-        and (item.name in fail_on or (item.name == "review" and "review" in fail_on))
-    ]
-    return 1 if failed else 0
 
 
 if __name__ == "__main__":

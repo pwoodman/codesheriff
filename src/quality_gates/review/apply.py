@@ -22,6 +22,39 @@ def apply_finding(root: Path, finding: Finding) -> str:
     return _apply_unified(root, patch)
 
 
+def finding_from_row(row: dict[str, object]) -> Finding:
+    """Rebuild a Finding from a report artifact row."""
+    return Finding(
+        gate=str(row.get("gate") or "review"),
+        message=str(row.get("message") or ""),
+        path=row.get("path"),
+        line=row.get("line") if isinstance(row.get("line"), int) else None,
+        rule=row.get("rule"),
+        patch=row.get("patch"),
+        suggestion=row.get("suggestion"),
+        verify=row.get("verify"),
+    )
+
+
+def apply_reported_finding(
+    root: Path, finding_id: str | None
+) -> tuple[dict[str, object] | None, dict[str, object]]:
+    """Load a reported finding by id, apply it, and verify the result.
+
+    Returns ``(row, verified)``; ``row`` is ``None`` when the id does not
+    resolve, in which case ``verified`` is the packed error payload.
+    """
+    from quality_gates.oracle import finding_from_reports
+
+    packed = finding_from_reports(root, finding_id)
+    row = packed.get("finding")
+    if not isinstance(row, dict):
+        return None, packed
+    verified = apply_and_verify(root, finding_from_row(row))
+    verified["id"] = row.get("id")
+    return row, verified
+
+
 def apply_and_check(
     root: Path,
     finding: Finding,
@@ -136,11 +169,35 @@ def _apply_line_replacement(root: Path, finding: Finding, patch: str) -> str:
             ast.parse(updated, filename=str(path))
         except SyntaxError as exc:
             return f"patch rejected: syntax error at line {exc.lineno or '?'}"
+    if not _parses_for_suffix(path.suffix, updated):
+        return (
+            f"patch rejected: result is not valid {path.suffix.lstrip('.') or 'file'}"
+        )
     try:
         path.write_text(updated, encoding="utf-8")
     except OSError as exc:
         return f"patch rejected: could not write file ({exc})"
     return f"applied line replacement at {finding.path}:{finding.line}"
+
+
+def _parses_for_suffix(suffix: str, text: str) -> bool:
+    """Structured-format guard for non-Python patches (never raises)."""
+    lowered = suffix.lower()
+    if lowered == ".toml":
+        import tomllib
+
+        try:
+            tomllib.loads(text)
+        except tomllib.TOMLDecodeError:
+            return False
+    elif lowered == ".json":
+        import json as _json
+
+        try:
+            _json.loads(text)
+        except ValueError:
+            return False
+    return True
 
 
 def _apply_unified(root: Path, patch: str) -> str:

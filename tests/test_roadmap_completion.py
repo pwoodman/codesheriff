@@ -197,7 +197,7 @@ def test_scenario_6_policy_changes_in_pr_cannot_weaken_pr_own_requirements(
     assert config.trust == "untrusted"
 
 
-def test_scenario_7_cli_oracle_mcp_hosted_return_consistent_decisions() -> None:
+def test_scenario_7_cli_and_oracle_return_consistent_decisions() -> None:
     from quality_gates.oracle import remaining_from_results
 
     failed_gate = GateResult(name="compile", status="fail")

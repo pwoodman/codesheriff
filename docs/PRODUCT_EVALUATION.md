@@ -48,7 +48,7 @@ payments. Treat it as a product-discovery input to validate with actual users.
 
 1. Keep `codesheriff` as the only documented executable; retain `quality` only
    as a compatibility shim.
-2. Use `codesheriff_*` as the only documented MCP tool namespace.
+2. Keep one documented agent entry point: the `codesheriff` CLI.
 3. Keep the established `[quality]` configuration schema during the transition.
 4. Generate every agent integration from one canonical template.
 5. Present one primary command, `codesheriff run`, before advanced subcommands.

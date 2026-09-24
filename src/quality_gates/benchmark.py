@@ -51,6 +51,38 @@ VALIDATION_REPOS = {
     },
 }
 
+# Open-source benchmark suites we score against (not scanned with gates; they
+# provide ground-truth PRs/golden comments). Run via:
+#   codesheriff eval --suite martian      # withmartian CRB golden comments
+#   codesheriff eval --suite aacrbench    # Alibaba AACR-Bench schema
+EXTERNAL_SUITES = {
+    "withmartian-code-review-benchmark": {
+        "url": "https://github.com/withmartian/code-review-benchmark",
+        "license": "MIT",
+        "kind": "golden-comments",
+        "prs": 50,
+        "repos": ("sentry", "grafana", "cal", "discourse", "keycloak"),
+        "compares": ("Macroscope", "Bugbot", "Greptile", "Sourcery"),
+        "command": "codesheriff eval --suite martian --download",
+        "adapter": "quality_gates.review.external_eval",
+    },
+    "aacr-bench": {
+        "url": "https://github.com/alibaba/aacr-bench",
+        "license": "Apache-2.0",
+        "kind": "pr-diff-benchmark",
+        "prs": 200,
+        "repos": 50,
+        "languages": 10,
+        "command": "codesheriff eval --suite aacrbench",
+        "adapter": "quality_gates.review.aacr_bench",
+    },
+}
+
+
+def register_external_suite(name: str, **info: Any) -> None:
+    """Register an additional open-source benchmark suite."""
+    EXTERNAL_SUITES[name] = dict(info)
+
 
 @dataclass
 class BenchmarkCase:
@@ -276,6 +308,7 @@ def run_full_benchmark(root: Path) -> dict[str, Any]:
         "total_false_positives": total_fp,
         "precision": round(total_tp / max(1, total_tp + total_fp), 4),
         "total_duration_seconds": round(total_duration, 2),
+        "external_suites": EXTERNAL_SUITES,
         "results": [r.to_dict() for r in results],
     }
 

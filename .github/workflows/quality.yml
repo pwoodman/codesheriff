@@ -123,7 +123,7 @@ jobs:
                   "commit_sha": os.environ.get("GITHUB_SHA"),
                   "ref": os.environ.get("GITHUB_REF"),
                   "sarif": sarif,
-                  "tool_name": "quality-gates",
+                  "tool_name": "codesheriff",
               }).encode(),
               headers={
                   "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",

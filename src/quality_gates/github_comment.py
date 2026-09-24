@@ -261,7 +261,7 @@ def _inline_body(item: Finding) -> str:
     parts.extend(
         [
             "",
-            "Fix with `/sheriff fix`, `codesheriff oracle --prompt`, or MCP `codesheriff_finding_context`.",
+            "Fix with `/sheriff fix` or `codesheriff oracle --prompt`.",
         ]
     )
     return "\n".join(parts)

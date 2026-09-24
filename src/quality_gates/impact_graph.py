@@ -98,7 +98,7 @@ def is_test(path: str) -> bool:
 
 
 GRAPH_CACHE_NAME = "graph.json"
-GRAPH_CACHE_VERSION = 1
+GRAPH_CACHE_VERSION = 2
 
 
 def _impact_cache_enabled(config: QualityConfig | None) -> bool:
@@ -496,6 +496,8 @@ def build_graph(
     aliases = config.ui_path_aliases
     index = _file_index(root, config)
     cached = _load_graph(root)
+    if cached and cached.get("version") != GRAPH_CACHE_VERSION:
+        cached = None  # parser changed: re-derive every edge from source
     old_hashes = cached.get("file_hashes", {}) if cached else {}
     old_files = set(cached.get("files", [])) if cached else set()
     current_files = set(index.keys())
@@ -881,6 +883,14 @@ def _python_deps(
                 else:
                     unresolved.append(module or imported.strip().split(",")[0])
                 continue
+            # `from package import submodule` should credit the submodule
+            # (coverage/test attribution), not just the package __init__.
+            sub_hits = [
+                _resolve_python_abs(f"{module}.{name.strip()}", index, root)
+                for name in imported.split(",")
+                if name.strip()
+            ]
+            resolved.extend(hit for hit in sub_hits if hit)
             hit = _resolve_python_abs(module, index, root)
             if hit:
                 resolved.append(hit)

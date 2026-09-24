@@ -25,11 +25,11 @@ QUALITY_POLICY=observe quality run     # fleet mute / first week
 ## Old repo (do not stir a mess)
 
 ```bash
-pip install "git+https://github.com/YOUR_ORG/quality-gates.git@v1"
-quality init --org YOUR_ORG --policy adopt
-quality run --skip review              # reports everything; does not fail yet
-quality baseline                       # grandfather today's findings + coverage
-git add quality.toml .quality-baseline.json .github/workflows/quality-cli.yml
+pip install codesheriff
+codesheriff init --org YOUR_ORG --policy adopt
+codesheriff run --skip review          # reports everything; does not fail yet
+codesheriff baseline                   # grandfather today's findings + coverage
+git add sheriff.toml .sheriff-baseline.json .github/workflows/quality-cli.yml
 ```
 
 The next PR:
@@ -103,10 +103,10 @@ Industry 80% line floor and P0 audit failures block the PR. Skip ≠ fail when a
 
 **Ten to a hundred repos:**
 
-1. Pin **one** quality-gates version in an org reusable workflow (`@v1` or a SHA).
+1. Pin **one** codesheriff version in an org reusable workflow (`@v1` or a SHA).
 2. Add the same cheap workflow to every repo (Path A in `examples/CONSUMING.md`). Do **not** turn on `ci.mode = github` org-wide — that is how you burn runner minutes.
 3. Ship `policy = observe` (or `QUALITY_POLICY=observe` on the org workflow) for a few days: comments only, green checks, people see the report.
-4. Flip to `adopt` and land a baseline PR per repo (`quality baseline`). That PR should stay green.
+4. Flip to `adopt` and land a baseline PR per repo (`codesheriff baseline`). That PR should stay green.
 5. Enforce **per repo** when that team is ready. Do not flip 100 repos to `enforce` on the same Monday.
 6. Keep Playwright/Cypress off Actions unless a repo opts in.
 
